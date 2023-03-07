@@ -1,0 +1,222 @@
+---
+title: "통계학응용특강"
+author: "기지훈 박남욱 윤승욱"
+date: "Pizza Restaurant Sales"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Questions for analysis
+1. 식당의 가장 바쁜 날짜와 시간
+2. 바쁜기간에 만드는 피자의 수
+3. 가장 많이 팔리는 피자와 적게 팔리는 피자
+
+
+```{r chunk1}
+library(tidyverse)
+library(readxl)
+library(lubridate)
+library(janitor)
+```
+
+```{r chunk2}
+pizza.orders<- read_excel("Data Model - Pizza Sales.xlsx")
+head(pizza.orders)
+```
+
+#data 
+
+order_id: 테이블에 의해 배치된 각 주문에 대한 고유 식별자
+
+order_details_id: 각 주문에 포함된 각 피자의 고유 식별자(동일한 유형 및 크기의 피자는 동일한 행에 보관되고 수량이 증가함)
+
+pizza_id: 주문한 피자를 크기 및 가격과 같은 세부 정보와 연결하는 고유 키 식별자
+
+quantity: 동일한 종류와 크기의 피자 각 주문수량
+
+order_date: 주문한 날짜 (요리 및 서빙 전에 시스템에 입력)
+
+order_time: 주문이 접수된 시간(요리 및 서빙 전에 시스템에 입력됨)
+
+unit_price: 피자 가격(USD)
+
+total_price: unit_price * 수량
+
+pizza_size: 피자의 크기(소형, 중형, 대형, X 대형, XX 대형)
+
+pizza_type: 주문한 피자를 크기 및 가격과 같은 세부 정보와 연결하는 고유 키 식별자
+
+pizza_ingredients: 메뉴에 표시된대로 피자에 사용 된 재료 (명시되지 않은 경우에도 모두 모짜렐라 치즈를 포함하며 다른 소스가 지정되지 않는 한 모두 토마토 소스를 포함합니다)
+
+pizza_name: 메뉴에 표시된 피자의 이름
+
+# data str
+```{r chunk3}
+dim(pizza.orders)
+sum(is.na(pizza.orders)) ## 결측값 존재 하지않음
+str(pizza.orders)
+```
+
+## 1. 식당의 가장 바쁜 날짜와 시간
+월, 요일, 시간,변수를만들어 주겠습니다. 
+```{r chunk4}
+pizza_orders<-pizza.orders%>%
+  mutate(hour = hour(order_time),
+         month = month(order_date,label = T),   
+         weekday = wday(order_date,label = T)) 
+head(pizza_orders)
+```         
+월별 피자 총 판매 수
+```{r chunk5}
+pizza_orders%>%
+  group_by(month)%>%
+  summarize(orders = sum(quantity))%>%
+  ggplot()+
+  geom_col(aes(x = month, y = orders, fill= orders))+
+  labs(title = "Monthly maked pizzas",y = "Total maked pizzas")
+```
+
+
+
+요일별 피자 총 판매 수
+```{r chunk6}
+pizza_orders%>%
+  group_by(weekday)%>%
+  summarize(orders = sum(quantity))%>%
+  ggplot()+
+  geom_col(aes(x = weekday,y=orders,fill=weekday))+
+  labs(title = "Number of maked pizzas per weekday")
+```
+
+
+
+
+시간대별 피자 총 판매수
+```{r chunk7}
+pizza_orders%>%
+  group_by(hour)%>%
+  summarize(orders = sum(quantity))%>%
+  ggplot()+
+  geom_line(aes(x=hour,y=orders),linetype=5,color="red")+
+  labs(title = "hourly orders")
+```  
+
+
+
+
+:
+1년 중 가장 바쁜 달은 4월 7월 11월 이며, 구운 피자의 수가 가장 많은 달은 7월이다.
+
+요일별 매출은 예상하기 쉬운결과인 목, 금, 토에 판매량이 많았다.
+
+시간별 매출에 관해서는 두번의 최고판매량인 시간이 있다
+11시경에 증가하여 점심시간인 12시에 최고에 도달하고 두번째로 저녁시간인 18시에 다시 높은 판매량을 가진다.
+
+##2. 바쁜기간에 만드는 피자의 수
+시간별로 만들어지는 피자의 비율을 통해 비교할 것 입니다.
+```{r chunk8}
+hour_pizzas <- pizza_orders%>%
+  group_by(hour)%>%
+  summarize(total_pizzas = sum(quantity))%>%
+  mutate(perc_order = total_pizzas/sum(total_pizzas))%>%
+  mutate(perc_order = scales::percent(perc_order))
+
+print(hour_pizzas)
+```
+이미 앞서서 12시와 18시에 가장 많은 피자가 판매된다는 것을 알고 있다. 
+12시는 6776개의 피자가 18시는 5417개의 피자가 만들어지는것을 확인 할 수 있다.
+```{r chunk9}
+rbind(hour_pizzas[4,],hour_pizzas[10,])
+```
+이제 시간을 아침 점심 저녁으로 category하여 하루 중 각 시간이 나타내는 피자의 비울을 확인해보겠습니다.
+```{r chunk10}
+pizza_orders<-pizza_orders%>%
+  mutate(period =case_when(
+    hour >= 6 & hour < 12 ~ "Morning",
+    hour >= 12 & hour < 18 ~ "Afternoon",
+    hour >= 18 & hour < 24 ~ "Evening"
+  ))
+head(pizza_orders)
+```
+
+```{r chunk11}
+period_perc <- pizza_orders %>%
+  group_by(period) %>%
+  summarise(orders = sum(quantity)) %>%
+  mutate(total_perc = orders/sum(orders)) %>%
+  mutate(total_perc = scales::percent(total_perc))
+
+## 순서형범주화
+period_perc$period <- ordered(period_perc$period, levels = c("Morning", "Afternoon", "Evening")) 
+```
+```{r chunk12}
+ggplot(period_perc)+
+  geom_col(aes(x=period, y=orders,fill=period))+
+  labs(title="order on times of day")
+print(period_perc)
+```
+이 차트에서 오후 12시 부터 6시까지 가장 많은 피자가 구워지는 것을 확인 하수 있고
+전체 피자의 약 60%가 afternoon에 만들어짐을 알 수 있다.
+
+##3. 가장 많이 팔리는 피자와 적게 팔리는 피자
+피자 종류별, 피자 크기별, 피자 카테고리별 판매수를 구해보겠습니다.
+
+피자 종류별
+```{r chunk13}
+type_pizza <- pizza_orders %>%
+  group_by(pizza_name) %>%
+  summarise(orders = sum(quantity))
+
+type_pizza%>%
+  arrange(desc(orders))%>%
+  head()
+
+type_pizza%>%
+  arrange(desc(orders))%>%
+  tail()
+  
+
+  ggplot(type_pizza, aes(x = pizza_name, y = orders, fill = orders)) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() +
+  labs(title = "Sales on pizza by type of pizza", x = "Pizza name")
+```
+
+피자 크기별
+```{r chunk14}
+size_category <- pizza_orders %>%
+  group_by(pizza_size) %>%
+  summarise(number = sum(quantity)) %>%
+  mutate(total_perc = number/sum(number)) %>%
+  mutate(total_perc = scales::percent(total_perc))
+
+size_category$pizza_size <- ordered(size_category$pizza_size, levels = c("S", "M", "L", "XL", "XXL"))
+
+ggplot(size_category, aes(x = pizza_size, y = number, fill = pizza_size)) + 
+  geom_col() + 
+  labs(title = "Number of sales by size of pizza", x = "Pizza size")
+```
+
+피자 카테고리별
+```{r chunk15}
+category <- pizza_orders %>%
+  group_by(pizza_category) %>%
+  summarise(orders = sum(quantity)) %>%
+  mutate(total_perc = orders/sum(orders)) %>%
+  mutate(total_perc = scales::percent(total_perc))
+
+print(category)
+
+ggplot(category, aes(x = pizza_category, y = orders, fill = pizza_category)) + 
+  geom_col() + 
+  labs(title = "Distribution on sales by pizza category", x = "Pizza category")
+```
+
+Classic Dluxe Pizza, Barbecue Chicken Pizza, Hawailan Pizza 순으로 대중들에게 인기가 많다.반면 The Brie Carre Pizza는 가장 인기가 없는 피자 임을 확인할 수 있다.
+
+일반적으로 고객들은 보통 라지사이즈를 주문하는것으로 확인되었다.
+
+
+피자 카테고리에 대한 선호도를 살펴보면 클래식 카테고리가 가장 높은 주문수를 가지고 
+나머지 카테고리들은 20%내외로 비슷한 수준을 보인다.

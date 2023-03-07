@@ -1,0 +1,700 @@
+# R Text mining
+
+## web scraping
+we introduce the basics of web scraping with rvest.
+```{r chunk1}
+library(tidyverse)
+library(rvest)
+```
+
+# HTML basics
+HTML stands for "HyperText Markup Language" and looks like this:
+```{r chunk2}
+<html>
+<head>
+  <title>Page title</title>
+</head>
+<body>
+  <h1 id='first'>A heading</h1>
+  <p>Some text &amp; <b>some bold text.</b></p>
+  <img src='myimg.png' width='100' height='100'>
+</body>
+```
+HTML has a hierarchical structure formed by elements - start tag: (e.g. <tag>) - attributes : (id='first') - end tag[^1] (e.g. </tag>) (some tags may not require any end tag.) - contents (everything in between the start and end tag)
+반드시 헤드와 바디 태그를 가진다 
+& 
+#Elements
+All up, there are over 100 HTML elements. Some of the most important are:
+
+Every HTML page must be must be in an <html> element,
+
+It must have two children: -<head>: document metadata like the page title, -<body>:the content you see in the browser.
+
+Block tags like <h1> (heading 1), <p> (paragraph), and <ol> (ordered list) form the overall structure of the page.
+
+Inline tags like <b> (bold), <i> (italics), and <a> (links) formats text inside block tags.
+
+# Contents 
+a paragraph of text, with one word in bold
+```{r,chunk3}
+<p>
+  Hi! my<b>name</b> is Hadley.
+</p>
+```
+Hi! My name is Hadley.
+
+The children of a node refers only to elements, so the <p> element above has one child, the <b> element.
+
+The <b> element has no children, but it does have contents (the text “name”).
+
+Some elements, like <img> can’t have children.
+
+#Attributes
+Tags can have named attributes which look like name1='value1' name2='value2'.
+
+Two of the most important attributes are id and class, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page.
+
+#Reading HTML with rvest
+You’ll usually start the scraping process with read_html(). This returns a xml_document object which you’ll then manipulate using rvest functions:
+```{r chunk4}
+html <- read_html("http://rvest.tidyverse.org/")
+class(html)
+```
+For examples and experimentation, rvest also includes a function that lets you create an xml_document from literal HTML:
+```{r chunk5}
+html <- minimal_html("
+  <p>This is a paragraph<p>
+  <ul>
+    <li>This is a bulleted list</li>
+  </ul>
+")
+html
+```
+
+To identify the elements from the data, rvest provides CSS selectors.
+
+#CSS selectors
+short for Cascading Style Sheets,
+defines the visual styling of HTML documents.
+provides useful tools for scraping.
+
+The four most important selectors are: - p: selects all <p> elements.
+
+ .title: selects all elements with class “title”.
+
+ p.special: selects all <p> elements with class “special”.
+
+ #title: selects the element with the id attribute that               equals “title”.
+
+id attributes must be unique within a document, so this will only ever select a single element.
+```{r chunk6}
+html <- minimal_html("
+  <h1>This is a heading</h1>
+  <p id='first'>This is a paragraph</p>
+  <p class='important'>This is an important paragraph</p>
+")
+```
+-Extract elements with html
+```{r chunk7}
+html%>% html_element("h1")
+html%>% html_elements("p")
+html%>% html_elements("#first")
+```
+#Extracting data
+Now that you’ve got the elements you care about, you’ll need to get data out of them.
+
+You’ll usually get the data from either the text contents or an attribute.
+
+But, sometimes (if you’re lucky!), the data you need will be in an HTML table.
+
+##Text
+Use html_text2() to extract the plain text contents of an HTML element:
+```{r chunk8}
+html <- minimal_html("
+  <ol>
+    <li>apple &amp; pear</li>
+    <li>banana</li>
+    <li>pineapple</li>
+  </ol>
+")
+html %>% 
+  html_elements("li") %>% 
+  html_text2()
+```
+ . escaped ampersand is automatically converted to &; you’ll only ever see HTML escapes in the source HTML, not in the data returned by rvest.
+ 
+html_text() returns the garbled raw underlying text:
+```{r chunk 9}
+html %>% 
+  html_elements("li")%>%
+  html_text()
+```
+```{r chunk10}
+html <- minimal_html("<body>
+  <p>
+  This is
+  a
+  paragraph.</p><p>This is another paragraph.
+  
+  It has two sentences.</p>
+")
+
+html %>% 
+  html_element("body") %>% 
+  html_text2() %>% 
+  cat()
+
+html%>%
+  html_element("body")%>%
+  html_text()%>%
+  cat()
+```
+
+#Attributes
+Attributes are used to record the destination of links (the href attribute of <a> elements) and the source of images (the src attribute of the <img> element):
+
+```{r chunk11}
+html <- minimal_html("
+  <p><a href='https://en.wikipedia.org/wiki/Cat'>cats</a></p>
+  <img src='https://cataas.com/cat' width='100' height='200'>
+")
+```
+.The value of an attribute can be retrieved with html_attr():
+```{r chunk12}
+html %>% 
+  html_elements("a") %>% 
+  html_attr("href")
+
+html %>% 
+  html_elements("img") %>% 
+  html_attr("src")
+```
+Note that html_attr() always returns a string, so you may need to post-process with as.integer()/readr::parse_integer() or similar.
+```{r chunk13}
+html %>% 
+  html_elements("img") %>% 
+  html_attr("width")
+
+html %>% 
+  html_elements("img") %>% 
+  html_attr("width") %>% 
+  as.integer()
+```
+
+#Tables
+HTML tables are composed four main elements: <table>, <tr> (table row), <th> (table heading), and <td> (table data).
+```{r chunk14}
+html_of <- minimal_html("
+  <table>
+    <tr>
+      <th>x</th>
+      <th>y</th>
+    </tr>
+    <tr>
+      <td>1.5</td>
+      <td>2.7</td>
+    </tr>
+    <tr>
+      <td>4.9</td>
+      <td>1.3</td>
+    </tr>
+    <tr>
+      <td>7.2</td>
+      <td>8.1</td>
+    </tr>
+  </table>
+  ")
+```
+Because tables are a common way to store data, rvest includes the handy html_table() which converts a table into a data frame:
+```{r chunk15}
+html_of%>%
+  html_node("table")%>%
+  html_table()
+```
+#html_elements()
+Select the elements that contain each observation
+
+Extract the variables from each observation.
+
+Ex) dplyr::starwars:
+
+```{r chunk16}
+html <- minimal_html("
+  <ul>
+    <li><b>C-3PO</b> is a <i>droid</i> that weighs <span class='weight'>167 kg</span></li>
+    <li><b>R2-D2</b> is a <i>droid</i> that weighs <span class='weight'>96 kg</span></li>
+    <li><b>Yoda</b> weighs <span class='weight'>66 kg</span></li>
+    <li><b>R4-P17</b> is a <i>droid</i></li>
+  </ul>
+  ")
+```
+if you try to extract name, speicies, and weight directly, you end up with ond 
+vector of length four and two vectors of length three,and no way to align them:
+```{r chunk17}
+html %>% html_elements("b") %>% html_text2()
+
+html %>% html_elements("i") %>% html_text2()
+
+html %>% html_elements(".weight") %>% html_text2()
+```
+Instead, use html_elements() to find a element that corresponds to each character, then use html_element() to extract each variable for all observations:
+```{r chunk18}
+characters <- html %>% html_elements("li")
+characters %>% html_element("b") %>% html_text2()
+characters %>% html_element("i") %>% html_text2()
+characters %>% html_element(".weight") %>% html_text2()
+```
+html_element() automatically fills in NA when no elements match, keeping all of the variables aligned and making it easy to create a data frame:
+```{r chunk19}
+data.frame(
+  name = characters %>% html_element("b") %>% html_text2(),
+  species = characters %>% html_element("i") %>% html_text2(),
+  weight = characters %>% html_element(".weight") %>% html_text2()
+)
+```
+#US Murders data
+Now we try to extract data from a Wikipedia page.
+```{r chunk20}
+url <- paste0("https://en.wikipedia.org/wiki/",          "Gun_violence_in_the_United_States_by_state")
+
+url <- "https://en.wikipedia.org/wiki/Gun_violence_in_the_United_States_by_state"
+```
+You can see the data table when you visit the webpage:
+Actually, the text is code written in hyper text markup language (HTML).
+
+Every browser has a way to show the html source code for a page, each one different.
+
+Chrome: Control-U
+Mac: command+alt+U
+
+#HTML
+Here are a few lines of code from the Wikipedia page that provides 
+the US murders data :
+```{r chunk21}
+<table class="wikitable sortable">
+<tr>
+<th>State</th>
+<th><a href="/wiki/List_of_U.S._states_and_territories_by_population" 
+title="List of U.S. states and territories by population">Population</a><br />
+<small>(total inhabitants)</small><br />
+<small>(2015)</small> <sup id="cite_ref-1" class="reference">
+<a href="#cite_note-1">[1]</a></sup></th>
+<th>Murders and Nonnegligent
+<p>Manslaughter<br />
+<small>(total deaths)</small><br />
+<small>(2015)</small> <sup id="cite_ref-2" class="reference">
+<a href="#cite_note-2">[2]</a></sup></p>
+</th>
+<th>Murder and Nonnegligent
+<p>Manslaughter Rate<br />
+<small>(per 100,000 inhabitants)</small><br />
+<small>(2015)</small></p>
+</th>
+</tr>
+<tr>
+<td><a href="/wiki/Alabama" title="Alabama">Alabama</a></td>
+<td>4,853,875</td>
+<td>348</td>
+<td>7.2</td>
+</tr>
+<tr>
+<td><a href="/wiki/Alaska" title="Alaska">Alaska</a></td>
+<td>737,709</td>
+<td>59</td>
+<td>8.0</td>
+</tr>
+<tr>
+```
+The first step using rvest is to import the webpage into R. The package makes this quite simple:
+```{r chunk22}
+library(tidyverse)
+library(rvest)
+h<-read_html(url)
+```
+Note that the entire Murders in the US Wikipedia webpage is now contained in h. The class of this object is:
+```{r chunk23}
+class(h)
+```
+Now, how do we extract the table from the object h? If we print h, we don’t really see much:
+```{r chunk24}
+h
+```
+We can see all the code that defines the downloaded webpage using the html_text function like this:
+```{r chunk25}
+html_text(h)
+```
+We can see the data we are after are stored in an HTML table: you can see this in this line of the HTML code above <table class="wikitable sortable">.
+
+html_nodes extracts all nodes of different types and html_node extracts the first one. To extract the tables from the html code we use:
+
+```{r chunk26}
+tab <- h%>%
+  html_nodes("table")
+tab
+```
+Now, instead of the entire webpage, we just have the html code for the tables in the page:
+The table we are interested is the second one:
+```{r chunk27}
+tab[[2]]
+```
+In fact rvest includes a function just for converting HTML tables into data frames:
+```{r chunk28}
+tab1 <- tab[[2]]%>%
+  html_table()
+class(tab1)
+```
+We are now much closer to having a usable data table:
+```{r chunk29}
+murders_raw <- tab1|> setNames(c("state", "population","total", "murder", "gun_muder", "gun_own","total_rate",  "murder_rate","gun_muder_rate")) 
+murders_raw
+```
+We still have some wrangling to do. For example, we need to remove the commas and turn characters into numbers.
+
+The first three strings in murders$population defined by the population variable are:
+```{r chunk30}
+murders_raw$population[1:3]
+```
+The usual coercion does not work here:
+```{r chunk31}
+as.numeric(murders_raw$population[1:3])
+```
+We want to do here is remove the pattern, ,, from the strings in murders_raw$population and then coerce to numbers.
+
+We can use the str_detect function to see that two of the three columns have 
+commas in the entries:
+```{r chunk32}
+commas <- function(x) any(str_detect(x, ","))
+murders_raw %>% summarize_all(commas)
+```
+We can then use the str_replace_all function to remove them:
+```{r chunk33}
+test_1 <- str_replace_all(murders_raw$population, ",", "")
+test_1 <- as.numeric(test_1)
+```
+Now check the 13th element of murders_raw$population
+```{r chunk34}
+murders_raw$population[13]
+```
+[7] seems to be an expression of some kind of annotation. Using regular expressions, we can add another condition:
+```{r chunk35}
+test_2 <- str_replace_all(murders_raw$population, c("\\[(\\d|\\D)\\]"="",","=""))
+test_2 <-as.numeric(test_2)
+```
+It turns out that this operation is so common that readr includes the function parse_number specifically meant to remove non-numeric characters before coercing:
+```{r chunk36}
+test_3 <- parse_number(murders_raw$population)
+identical(test_2, test_3)
+```
+Let's see if there are other types of characters.
+```{r chunk37}
+head(murders_raw,10)
+```
+```{r chunk38}
+for(i in 2:dim(murders_raw)[2]){
+temp<-unique(unlist(str_extract_all(murders_raw[[i]],c("\\D"), simplify = FALSE))) 
+cat(names(murders_raw)[i],"\n")
+cat(temp,"\n")
+}
+```
+We roughly checked what patterns there are, so let’s get rid of these patterns using mutate.
+```{r chunk39}
+murders_new <- murders_raw |> mutate_at(2:dim(murders_raw)[2], str_replace_all,c("\\[(\\d|\\D)\\]"="", ","="", "—"=""))
+head(murders_new)
+```
+So we can obtain our desired table using:
+```{r chunk40}
+murders_new2 <- murders_new |> mutate_at(2:dim(murders_new)[2], as.numeric)
+head(murders_new2)
+```
+#Case study 2: self-reported heights
+The dslabs package includes the raw data from which the heights dataset was obtained. You can load it like this:
+```{r chunk41}
+library(dslabs)
+data(reported_heights)
+```
+Suppose that these heights were obtained using a web form in which students were asked to enter their heights in inches.
+
+Unfortunately, the reported heights had several non-numeric entries, resulting in a character vector.
+
+If we try to parse it into numbers, we get a warning:
+```{r chunk42}
+class(reported_heights$height)
+x <- as.numeric(reported_heights$height)
+```
+Although most values appear to be height in inches as requested:
+```{r chunk43}
+head(x)
+```
+we do end up with many NA s :
+```{r chunk44}
+sum(is.na(x))
+```
+We can see some of the entries that are not successfully converted by using filter to keep only the entries resulting in NAs:
+```{r chunk45}
+reported_heights |> 
+  mutate(new_height = as.numeric(height)) |>
+  filter(is.na(new_height)) |> 
+  head(n=10)
+```
+We immediately see what is happening.
+
+No inches
+
+Feet and inches( x'y'' with x and y :5'4'' is 5*12 + 4 = 64.)
+
+A first step in this type of task is to survey the problematic entries and try to define specific patterns followed by a large groups of entries.
+
+To look for such patterns, it helps to remove the entries that are consistent with being in inches and to view only the problematic entries.
+
+```{r chunk46}
+not_inches <- function(x, smallest = 50, tallest = 84){
+  inches <- suppressWarnings(as.numeric(x))
+  ind <- is.na(inches) | inches < smallest | inches > tallest
+  ind
+}
+```
+We apply this function and find the number of problematic entries:
+```{r chunk47}
+problems <- reported_heights |> 
+  filter(not_inches(height)) |>
+  pull(height)
+length(problems)
+```
+We see that three patterns can be used to define three large groups within these exceptions.
+
+1. A pattern of the form x'y or x' y'' or x'y" with x and y representing feet and inches, respectively. Here are ten examples:
+## 5' 4" 5'7 5'7" 5'3" 5'11 5'9'' 5'10'' 5' 10 5'5" 5'2"
+
+2. A pattern of the form x.y or x,y with x feet and y inches. Here are ten examples:
+## 5.3 5.5 6.5 5.8 5.6 5,3 5.9 6,8 5.5 6.2
+
+3. Entries that were reported in centimeters rather than inches. Here are ten examples:
+## 150 175 177 178 163 175 178 165 165 180
+
+#Search and replace with regex
+We can see that not too many of our problematic strings match the pattern:
+```{r chunk48}
+pattern <- "^[4-7]'\\d{1,2}\"$"
+sum(str_detect(problems, pattern))
+```
+To see why this is, we show some examples that expose why we don’t have more matches:
+```{r chunk49}
+problems[c(2, 10, 11, 12, 15)] |> str_view(pattern)
+```
+An initial problem we see immediately is that some students wrote out the words “feet” and “inches”.
+
+We can see the entries that did this with the str_subset function:
+```{r chunk50}
+str_subset(problems, "inches")
+```
+We also see that some entries used two single quotes '' instead of a double quote 
+```{r chunk51}
+str_subset(problems,"''")
+```
+To correct this, we can replace the different ways of representing inches and feet with a uniform symbol.
+```{r chunk52}
+pattern <- "^[4-7]'\\d{1,2}$"
+```
+If we do this replacement before the matching, we get many more matches:
+```{r chunk53}
+problems |> 
+  str_replace("feet|ft|foot", "'") |> # replace feet, ft, foot with ' 
+  str_replace("inches|in|''|\"", "") |> # remove all inches symbols
+  str_detect(pattern) |> 
+  sum()
+```
+or now, We improve our pattern by adding \\s* in front of and after the feet symbol ' to permit space between the feet symbol and the numbers.
+```{r chunk54}
+pattern <- "^[4-7]\\s*'\\s*\\d{1,2}$"
+problems |> 
+  str_replace("feet|ft|foot", "'") |> # replace feet, ft, foot with ' 
+  str_replace("inches|in|''|\"", "") |> # remove all inches symbols
+  str_detect(pattern) |> 
+  sum()
+```
+The second large type of problematic entries were of the form x.y, x,y and x y. We want to change all these to our common format x'y. But we can’t just do a search and replace because we would change values such as 70.5 into 70'5.
+
+Our strategy will therefore be to search for a very specific pattern that assures us feet and inches are being provided and then, for those that match, replace appropriately.
+
+#Search and replace using groups
+Another powerful aspect of groups is that you can refer to the extracted values in a regex when searching and replacing.
+
+The regex special character for the i-th group is \\i. So \\1 is the value extracted from the first group, \\2 the value from the second and so on. As a simple example, note that the following code will replace a comma with period, but only if it is between two digits:
+```{r chunk55}
+pattern_with_groups <-  "^([4-7]),(\\d*)$"
+yes <- c("5,9", "5,11", "6,", "6,1")
+no <- c("5'9", ",", "2,8", "6.1.1")
+s <- c(yes, no)
+str_replace(s, pattern_with_groups, "\\1'\\2")
+```
+We can use this to convert cases in our reported heights.
+
+We are now ready to define a pattern that helps us convert all the x.y, x,y and x y to our preferred format. We need to adapt pattern_with_groups to be a bit more flexible and capture all the cases.
+```{r chunk56}
+pattern_with_groups <-"^([4-7])\\s*[,\\.\\s+]\\s*(\\d*)$"
+```
+
+Let’s break this one down:
+
+^ = start of the string
+[4-7] = one digit, either 4, 5, 6, or 7
+\\s* = none or more white space
+[,\\.\\s+] = feet symbol is either ,, . or at least one space
+\\s* = none or more white space
+\\d* = none or more digits
+$ = end of the string
+
+We can see that it appears to be working:
+```{r chunk57}
+str_subset(problems, pattern_with_groups) %>% head()
+```
+and will be able to perform the search and replace:
+```{r chunk58}
+str_subset(problems, pattern_with_groups) |> 
+  str_replace(pattern_with_groups, "\\1'\\2") |> head()
+```
+Again, we will deal with the inches-larger-than-twelve challenge later.
+
+#Testing and improving
+Let’s write a function that captures all the entries that can’t be converted into numbers remembering that some are in centimeters.
+```{r chunk59}
+not_inches_or_cm <- function(x, smallest = 50, tallest = 84){
+  inches <- suppressWarnings(as.numeric(x))
+  ind <- !is.na(inches) & 
+    ((inches >= smallest & inches <= tallest) |
+       (inches/2.54 >= smallest & inches/2.54 <= tallest))
+  !ind
+}
+
+problems <- reported_heights |> 
+  filter(not_inches_or_cm(height)) |>
+  pull(height)
+length(problems)
+```
+Let’s see what proportion of these fit our pattern after the processing steps we developed above:
+```{r chunk60}
+converted <- problems |> 
+  str_replace("feet|foot|ft", "'") |> # convert feet symbols to '
+  str_replace("inches|in|''|\"", "") |>  # remove inches symbols
+  str_replace("^([4-7])\\s*[,\\.\\s+]\\s*(\\d*)$", "\\1'\\2")# change format
+
+pattern <- "^[4-7]\\s*'\\s*\\d{1,2}$"
+index <- str_detect(converted, pattern)
+mean(index)
+```
+Note how we leveraged the pipe, one of the advantages of using stringr. This last piece of code shows that we have matched well over half of the strings. Let’s examine the remaining cases:
+```{r chunk61}
+converted[!index]
+```
+Four clear patterns arise:
+
+1.Many students measuring exactly 5 or 6 feet did not enter any inches, for example     6', and our pattern requires that inches be included.
+2.Some students measuring exactly 5 or 6 feet entered just that number.
+3.Some of the inches were entered with decimal points. For example 5'7.5''. Our         pattern only looks for two digits.
+4.Some entries have spaces at the end, for example 5 ' 9.
+
+Although not as common, we also see the following problems:
+
+5.Some entries are in meters and some of these use European decimals: 1.6, 1,70.
+6.Two students added cm.
+7.A student spelled out the numbers: Five foot eight inches.
+
+For case 1, if we add a '0 after the first digit, for example, convert all 6 to 6'0, then our previously defined pattern will match. This can be done using groups:
+```{r chunk62}
+yes <- c("5", "6", "5")
+no <- c("5'", "5''", "5'4")
+s <- c(yes, no)
+str_replace(s, "^([4-7])$", "\\1'0")
+```
+The pattern says it has to start (^) with a digit between 4 and 7 and end there ($). The parenthesis defines the group that we pass as \\1 to generate the replacement regex string.
+
+Note 5' is left untouched. This is because the extra ' makes the pattern not match since we have to end with a 5 or 6.
+
+We can use the none or once special character ?.
+we can use the one or moer special character +.
+```{r chunk63}
+str_replace(s, "^([56])'?$", "\\1'0")
+str_replace(s, "^([56])'+$", "\\1'0")
+```
+Here we only permit 5 and 6, but not 4 and 7. This is because 5 and 6 feet tall is quite common, so we assume those that typed 5 or 6 really meant 60 or 72 inches. However, 4 and 7 feet tall are so rare that, although we accept 84 as a valid entry, we assume 7 was entered in error.
+
+For case3, we need to allow the second group to include decimals not just digits. This means we must permit zero or one period . then zero or more digits. So we will be using both ? and *.
+```{r chunk64}
+yes <- c("1,7", "1, 8", "2, " )
+no <- c("5,8", "5,3,2", "1.7")
+s <- c(yes, no)
+str_replace(s, "^([12])\\s*,\\s*(\\d*)$", "\\1\\.\\2")
+```
+We now put all of what we have learned together into a function that takes a string vector and tries to convert as many strings as possible to one format. We write a function that puts together what we have done above.
+```{r chunk65}
+convert_format <- function(s){
+  s |>
+    str_replace("feet|foot|ft", "'") |> 
+    str_replace_all("inches|in|''|\"|cm|and", "") |>  
+    str_replace("^([4-7])\\s*[,\\.\\s+]\\s*(\\d*)$", "\\1'\\2") |> 
+    str_replace("^([56])'?$", "\\1'0") |> 
+    str_replace("^([12])\\s*,\\s*(\\d*)$", "\\1\\.\\2") |>  
+    str_trim() 
+}
+```
+We can also write a function that converts words to numbers:
+```{r chunk66}
+library(english)
+words_to_numbers <- function(s){
+  s <- str_to_lower(s)
+  for(i in 0:11)
+    s <- str_replace_all(s, words(i), as.character(i))
+  s
+}
+```
+Now we can see which problematic entries remain:
+```{r chunk67}
+converted <- problems |> words_to_numbers() |> convert_format()
+remaining_problems <- converted[not_inches_or_cm(converted)]
+pattern <- "^[4-7]\\s*'\\s*\\d+\\.?\\d*$"
+index <- str_detect(remaining_problems, pattern)
+remaining_problems[!index]
+```
+apart from the cases reported as meters, which we will fix below, they all seem to be cases that are impossible to fix.
+
+Putting it all together
+We are now ready to put it all together and wrangle our reported heights data to try to recover as many heights as possible. The code is complex, but we will break it down into parts.
+
+We start by cleaning up the height column so that the heights are closer to a feet’inches format. We added an original heights column so we can compare before and after.
+
+Now we are ready to wrangle our reported heights dataset:
+
+```{r chunk68}
+pattern <- "^([4-7])\\s*'\\s*(\\d+\\.?\\d*)$"
+
+smallest <- 50
+tallest <- 84
+new_heights <- reported_heights |> 
+  mutate(original = height, 
+         height = words_to_numbers(height) |> convert_format()) |>
+  extract(height, c("feet", "inches"), regex = pattern, remove = FALSE) |> 
+  mutate_at(c("height", "feet", "inches"), as.numeric) |>
+  mutate(guess = 12 * feet + inches) |>
+  mutate(height = case_when(
+    is.na(height) ~ as.numeric(NA),
+    between(height, smallest, tallest) ~ height,  #inches
+    between(height/2.54, smallest, tallest) ~ height/2.54, #cm
+    between(height*100/2.54, smallest, tallest) ~ height*100/2.54, #meters
+    TRUE ~ as.numeric(NA))) |>
+  mutate(height = ifelse(is.na(height) & 
+                           inches < 12 & between(guess, smallest, tallest),
+                         guess, height)) |>   select(-guess)
+```
+We can check all the entries we converted by typing:
+```{r chunk69}
+new_heights |>
+  filter(not_inches(original)) |>
+  select(original, height) |> 
+  arrange(height) |>
+  View()
+```
+A final observation is that if we look at the shortest students in our course:
+```{r chunk70}
+new_heights |> arrange(height) |> head(n=7)
+```
+We see heights of 53, 54, and 55. In the originals, we also have 51 and 52. These short heights are rare and it is likely that the students actually meant 5'1, 5'2, 5'3, 5'4, and 5'5. Because we are not completely sure, we will leave them as reported. The object new_heights contains our final solution for this case study.

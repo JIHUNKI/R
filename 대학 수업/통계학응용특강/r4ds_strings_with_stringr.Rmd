@@ -1,0 +1,736 @@
+---
+title: "R for Data Science"
+author: "Jongkyeong Kang"
+date: "Kangwon National University"
+output: html_document
+  
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. String basics
+
+## Create a string
+
+We will focus on the `stringr` package for string manipulation, which is part of the core tidyverse.
+
+
+```{r, message=FALSE}
+library(tidyverse)
+```
+
+-   To create strings, use either single quotes `'` or double quotes
+    `"`.
+
+```{r}
+string1 <- "This is a string"
+string2 <- 'If I want to include a 
+"quote" inside a string, I use single quotes'
+```
+
+-   If you forget to close quote, you'll see `+`, the continuation
+    character.
+
+```{=html}
+<!-- -->
+```
+    "This is a string without a closing quote
+    +
+    +
+    + HELP I'M STUCK
+
+-   If this happen, press `Esc` to "escape" it.
+
+## Escape
+
+-   Including quotes and backslash
+
+```{r}
+double_quote <- "\"" 
+single_quote <- '\'' 
+backslash <- "\\"
+```
+
+-   To see the raw contents of the string, use `writeLines()`
+
+```{r}
+x <- c(single_quote, double_quote, backslash)
+x
+writeLines(x)
+```
+
+## Raw strings
+
+-   Consider a string with multiple quotes or backslashes.
+
+```{r}
+tricky <- "double_quote <- \"\\\"\" # or '\"'
+single_quote <- '\\'' # or \"'\""
+writeLines(tricky)
+```
+
+-   A raw string usually starts with `r"(` and finishes with `)"`.
+
+```{r}
+tricky <- r"(double_quote <- "\"" # or '"'
+single_quote <- '\'' # or "'")"
+writeLines(tricky)
+```
+
+-   If your string contains `)"`, instead use `r"[]"` or `r"{}"`, or any
+    number of dashes with `()` e.g. `` `r"--()--" ``,
+    `` `r"---()---" ``.
+
+```{r}
+temp <-r"[this contains () ]"
+writeLines(temp)
+temp2 <- r"--(this contains (--) )--"
+writeLines(temp2)
+```
+
+## Other special characters
+
+-   newline: `\n`
+-   tab: `\t`
+-   Unicodes escapes that start with `\u` or `\U`.
+
+```{r}
+special_chr<-"This sentence \t contains \n some special characters such as \u00b5 and \U0001f604"
+writeLines(special_chr)
+```
+
+-   To see complete list of other special characters, type `?'"'`.
+
+# 2. Creating many strings from data
+
+## `str_c()`
+
+-   `str_c()` takes any number of vectors as arguments and returns a
+    character vector:
+-   `str_c()` is very similar to the base `paste0()`.
+
+```{r}
+str_c("x", "y")
+str_c("x", "y","z", sep=",")
+str_c("Hello ", c("John", "Susan"), sep= ",")
+str_c("Hello ", c("John", "Susan"), collapse= ",")
+```
+
+-   `str_c()` is designed to be used with `mutate()` so it obeys the
+    usual rules for recycling and missing values:
+
+```{r}
+set.seed(1410)
+df <- tibble(name = c(wakefield::name(3), NA))
+df |> mutate(greeting = str_c("Hi ", name, "!"))
+```
+
+-   If you want missing values to display in some other way, use
+    `coalesce()` either inside or outside of `str_c()`:
+
+```{r}
+df |> mutate(
+  greeting1 = str_c("Hi ", coalesce(name, "you"), "!"),
+  greeting2 = coalesce(str_c("Hi ", name, "!"), "Hi!"))
+```
+
+## `str_glue()`
+
+-   `str_glue()` provides an alternative approach. Anything inside `{}`
+    will be evaluated like it's outside of the string:
+
+```{r}
+df |> mutate(greeting = str_glue("Hi {name}!"))
+```
+
+-   If you need to include a regular `{` or `}` in your string, double
+    up the special characters:
+
+```{r}
+df |> mutate(greeting = str_glue("{{Hi {name}!}}"))
+```
+
+## `str_flatten()`
+
+-   It takes a character vector and combines each element of the vector
+    into a single string:
+
+```{r}
+str_flatten(c("x", "y", "z"))
+str_flatten(c("x", "y", "z"), ", ")
+str_flatten(c("x", "y", "z"), collapse=", ")
+```
+
+-   This makes it work well with `summarise()`:
+
+```{r}
+df <- tribble(
+  ~ name, ~ fruit,
+  "Carmen", "banana",
+  "Carmen", "apple",
+  "Marvin", "nectarine",
+  "Terence", "cantaloupe",
+  "Terence", "papaya",
+  "Terence", "madarine"
+)
+df |>
+  group_by(name) |> 
+  summarise(fruits = str_flatten(fruit, ", "))
+df%>%
+  group_by(name)%>%
+  summarise(fruits = str_c(fruit,collapse = ","))
+```
+
+-   The base `R` equivalent is `paste()` used with the `collapse`
+    argument.
+
+# 3. Letters
+
+## String Length
+
+\-`str_length()` : the number of characters in a string
+
+```{r}
+str_length(c("a", "R for data science", NA))
+# In BASE 
+length(c("a", "R for data science", NA))
+x <- c("a", "R for data science", NA)
+x[2]; length(strsplit(x[2][[1]],"")[[1]])
+```
+
+## Subsetting Strings
+
+\-`str_sub(string, start, end)`
+
+```{r}
+x <- c("Apple", "Banana", "Pear")
+str_sub(x,  1,  3)
+```
+
+-   Negative numbers count backwards from end
+
+```{r}
+str_sub(x, start=-3, end=-1) # substr (x)
+```
+
+-   It will just return as much as possible
+
+```{r}
+str_sub("a", 1, 5)
+```
+
+## Locales
+
+-   Change case
+
+```{r}
+dog <- "The quick brown dog"
+str_to_upper(dog)
+str_to_lower(dog)
+str_to_title(dog)
+```
+
+-   Turkish has two i's : with and without a dot, and it has a different
+    rule for capitalizing them :
+
+```{r}
+x<-c("i", "ı")
+str_to_upper(x)
+str_to_upper(x, locale = "tr")
+```
+
+-   `str_sort()` and `str_order()` sort vectors in alphabetical order,
+    but the alphabet is not the same in all languages
+
+```{r}
+str_sort(c("a","b", "c", "ch", "e", "h"))
+str_sort(c("a","b", "c", "ch", "e", "h"), locale = "cs") #Czech Republic
+str_sort(c("a","b", "c", "ch", "e", "h"), locale = "haw") #Hawaiian
+```
+
+-   The locale is specified as an ISO 639 language code.
+-   To see available locales, type `?stringi::stri_locale_list()`
+
+# 4. Matching Patterns with Regulars Expressions
+
+## Regexps
+
+**Regexps** are a very terse language that allow you to describe
+patterns in strings.
+
+![](img/regexp1.png)
+
+![](img/regexp2.png)
+
+## Basic Matches
+
+-   `str_view()`, `str_view_all()` take a character vector and a regular
+    expression, and show how they match.
+
+-   The simplest patterns match exact strings:
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "an",T)
+```
+
+-   The next step up in complexity is `.`, which matches any character :
+
+```{r}
+str_view(x, ".a.")
+```
+
+- To create the regular expression `\.` we need the string `\\.`
+
+```{r}
+# To create the regular expression, we need \\
+dot <- "\\."
+
+# But the expression itself only contains one:
+writeLines(dot)
+#> \.
+```
+
+```{r}
+# And this tells R to look for an explicit .
+str_view(c("abc", "a.c", "bef"), "a\\.c")
+```
+
+-   To match a literal `\`, use four backslashes.
+
+```{r}
+x <- "a\\b"
+writeLines(x)
+#> a\b
+
+str_view(x, "\\\\")
+```
+
+## Anchors
+
+*anchor* matches from the start or end of the string.
+
+-   \^ to match the start of the string.
+-   \$ to match the end of the string.
+
+```{r}
+x <- c("apple", "banana", "pear")
+str_view(x, "^a")
+str_view(x, "a$")
+```
+
+-   To force a regular expression to only match a complete string,
+    anchor it with both \^ and \$ :
+
+```{r}
+x<- c("apple pie", "apple", "apple cake")
+str_view(x, "apple")
+str_view(x, "^apple$")
+```
+
+## Alternates
+
+-   `[abc]` matches a, b, or c.
+-   `[a-z]` matches every character between `a` and `z`
+-   `[^abc]`matches anything except a, b, or c.
+
+```{r}
+str_view(c("abc", "a.c", "a*c", "a c"), "a[.]c")
+str_view(c("abc", "a.c", "a*c", "a c"), ".[*]c")
+str_view(c("abc", "a.c", "a*c", "a c"), "a[ ]")
+str_view(c("abc", "a.c", "a*c", "a c"), "a.c")
+```
+
+- You can use *alternation* to pick between one or more alternative
+patterns.
+
+- For example, abc\|def will match either "abc", or "def".
+
+```{r}
+str_view(c("grey","gray"),"gr(e|a)y")
+```
+
+## Character Classes
+
+There are a number of special patterns that match more than one
+character.
+
+-   `\d` matches any digit.
+-   The complement, `\D` matches any character that is not a decimal
+    digit.
+
+```{r}
+str_extract_all("1 + 2 = 3", "\\d+")[[1]]
+```
+
+```{r}
+str_extract_all("1 + 2 = 3", "\\D+")[[1]]
+```
+
+-   `\s` matches any whitespace (e.g., space, tab, newline).
+-   The complement, `\S` matches any non-whitespace character
+
+```{r}
+(text <- "Some  \t badly\n\t\tspaced \f text")
+str_extract_all(text, "\\s+", " ")
+str_extract_all(text, "\\S+",simplify = T)
+str_extract_all(text, "\\S+","")
+```
+
+-   `\w` matches any "word" character, which includes alphabetic
+    characters, marks and decimal numbers.
+
+-   The complement, `\W`, matches any non-word character.
+
+```{r}
+str_extract_all("Don't eat that!", "\\w+")[[1]]
+str_extract_all("Don't eat that!", "\\W")[[1]]
+```
+
+-   `\b` matches word boundaries, the transition between word and
+    non-word characters.
+
+-   The complement, `\B` matches the opposite: boundaries that have
+    either both word or non-word characters on either side.
+
+```{r}
+str_replace_all("The quick brown fox", "\\b", "_")
+str_replace_all("The quick brown fox", "\\B", "*")
+```
+
+## Pre-built classes
+
+-   `[:punct:]`: punctuation.
+-   `[:alpha:]`: letters.
+-   `[:lower:]`: lowercase letters.
+-   `[:upper:]`: upperclass letters.
+-   `[:digit:]`: digits.
+-   `[:xdigit:`]: hex digits.
+-   `[:alnum:]`: letters and numbers.
+-   `[:cntrl:]`: control characters.
+-   `[:graph:]`: letters, numbers, and punctuation.
+-   `[:print:]`: letters, numbers, punctuation, and whitespace.
+-   `[:space:]`: space characters (basically equivalent to \s).
+-   `[:blank:]`: space and tab.
+
+## Special Characters
+
+| string (type this) | regexp (to mean this) |        mathches (which matches this)         |
+|:----------------:|:-----------------:|:----------------------------------:|
+|       `\\.`        |         `\.`          |                     `.`                      |
+|       `\\!`        |         `\!`          |              `!` (`\?` for `?`)              |
+|       `\\\\`       |         `\\`          |                     `\`                      |
+|       `\\(`        |         `\(`          |  `(` (`\),\{,\}` for `),{,}`, respectively)  |
+|       `\\n`        |         `\n`          |              new line (return)               |
+|       `\\t`        |         `\t`          |                     tab                      |
+|       `\\s`        |         `\s`          |  any white space (`\S` fornon-whitespaces)   |
+|       `\\d`        |         `\d`          |        any digit (`\D` for non-digits        |
+|       `\\w`        |         `\w`          | any word character (`\S` for non-word chars) |
+|       `\\b`        |         `\b`          |  word boundaries (`\B` for non-boundaries)   |
+
+
+## Quantifiers
+
+-   ? : 0 or 1
+-   $+$ : 1 or more
+-   $*$ : 0 or more
+
+```{r}
+x<- "1888 is the longest year in Roman numerals: MDCCCLXXXVIII"
+str_view(x, "CC?")
+str_view(x, "CC+")
+str_view(x, "C[LX]+")
+```
+
+## Quantifiers
+
+- We can also specify the number of matches precisely :
+
+-   { n } : exactly n
+-   {n, } : n or more
+-   {, m} : at most m
+-   {n,m} : between n and m
+
+```{r}
+str_view(x, "C{2}")
+str_view(x,"C{2,}")
+str_view(x,"C{2,3}")
+```
+
+- By default these matches are "greedy": they will match the longest string possible. You can make them "lazy", matching the shortest string possible by putting a `?` after them:
+
+-   `??`: 0 or 1, prefer 0.
+-   `+?`: 1 or more, match as few times as possible.
+-   `*?`: 0 or more, match as few times as possible.
+-   `{n,}?`: n or more, match as few times as possible.
+-   `{n,m}?`: between n and m, match as few times as possible, but at
+    least n.
+
+```{r}
+str_extract(x, c("C{2,3}", "C{2,3}?"))
+str_extract(x, c("C[LX]+", "C[LX]+?"))
+```
+
+## Look Arounds
+
+-   `a(?=c)` : followed by
+-   `a(?!c)` :not followed by
+-   `(?<=b)a` : preceded by
+-   `(?\<!b)a` : not preceded by
+
+```{r}
+x<-"bacad"
+str_view_all(x,"a(?=c)")
+str_view_all(x,"a(?!c)")
+str_view_all(x,"(?<=b)a")
+str_view_all(x,"(?<!b)a")
+```
+
+```{r}
+x <- c("1 piece", "2 pieces", "3")
+str_extract(x, "\\d+(?= pieces?)")
+
+y <- c("100", "$400")
+str_extract(y, "(?<=\\$)\\d+")
+```
+
+## Grouping and Backreferences
+
+They also define "groups" that you can refer to with *backreferences*,
+like $\backslash 1$, $\backslash 2$, etc.
+
+```{r}
+#All fruits that have a repeated pair of letters
+str_view(fruit, "(..)\\1", match=TRUE)
+```
+
+# 5. Tools
+
+## Detect Matches
+
+`str_detect()` returns a logical vector the same length as the input
+
+```{r}
+x <- c('apple', 'banana', 'pear')
+str_detect(x, 'e')
+```
+
+```{r}
+head(words)
+# How many common words strat with t?
+sum(str_detect(words, "^t"))
+# What proportion of common words end with a vowel? 
+mean(str_detect(words, '[aeiou]$'))
+```
+
+```{r, echo = FALSE}
+head(words)
+sum(str_detect(words, "^t"))
+mean(str_detect(words, '[aeiou]$'))
+```
+
+-   Two ways to find all words that don't contain any vowels:
+
+```{r}
+# Find all words containing at least one vowel, and negate
+no_vowels1 <- !str_detect(words, '[aeiou]')
+no_vowels2 <- str_detect(words, '^[^aeiou]+$')
+identical(no_vowels1, no_vowels2)
+```
+
+-   A common use of \texttt{str\_detect()} is to select the elements
+    that match a pattern. We can do this with logical subsetting, or the
+    convenient \texttt{str\_subset()} wrapper:
+
+```{r}
+words[str_detect(words, "x$")]
+str_subset(words, "x$")
+```
+
+- Typically, your strings will be one column of a data frame, and you'll want to use `filter()` instead:
+몇번째에 있는지 i=seq_along(words)함수를 통해 알 수 있다.
+
+```{r}
+df <- tibble(
+  word <- words,
+  i = seq_along(words)
+)
+df %>% 
+  filter(str_detect(words, "x$"))
+```
+
+A variation on `str_detect()` is `str_count()`: rather than a simple yes or no, it tells you how many matches there are in a string:
+[aeiou]중 몇개를 포함하고 있는지 str_count
+mean : 평균적으로 한단에 몇개의 aeiou를 포함하는지 알수있다 
+```{r}
+# On average, how many vowels per words?
+mean(str_count(words, "[aeiou]"))
+```
+
+## Extract Matches
+
+`str_extract()` extract the actual text of a match.
+
+-   We use **Harvard sentences** for practicing string manipulations
+
+```{r}
+length(sentences)
+head(sentences)
+```
+
+```{r}
+colors <- c("red", "orange","yellow","green","blue","purple")
+color_match <- str_c(colors, collapse = "|")
+color_match
+```
+str_subset 으로 color_match요인을 넣으면 이컬러들이 있는 문장이 나옴
+str_extract 함수로 이 컬러를 가지고 있으면 그 컬러들이 나온다
+```{r}
+has_color <- str_subset(sentences, color_match)
+matches <- str_extract(has_color, color_match)
+head(matches)
+```
+
+-   Note that `str_extract()` only extracts the **first** match.
+
+```{r}
+more <- sentences[str_count(sentences, color_match)>1]
+str_view_all(more, color_match)
+```
+
+```{r}
+str_extract(more,color_match)
+```
+
+`To get all matches, use`str_extract_all()\`
+
+```{r}
+more <- sentences[str_count(sentences, color_match) > 1]
+str_extract_all(more, color_match)
+```
+
+## Grouped Matches
+
+Imagine we want to extract nouns from the sentences. As a heuristic,
+we'll look for any word that comes after "a", "an" or "the". Defining a
+"word" in a regular expression is a little tricky, so here I use a
+simple approximation a sequence of at least one character that isn't a
+space: 
+
+```{r}
+noun <- "(a|an|the) ([^ ]+)"
+has_noun <- sentences %>%
+  str_subset(noun)%>%
+  head(20)
+has_noun %>%
+  str_extract(noun)
+```
+
+\-`str_extract()` gives us the complete match, while `str_match()` gives
+each individual component. 
+각각 noun에 어떤식으로 매치되는지 확인한다
+```{r}
+has_noun %>%
+  str_match(noun)
+```
+
+- If your data is in tibble, it's often easier to use `tidyr::extract()`. 
+It works like `str_match()` but requires you to name the matches, which are then placed in new columns. 
+
+```{r}
+a<-tibble(sentence = sentences) %>%
+  tidyr::extract(
+    sentence, into=c("article", "noun"), "(a|an|the) ([^ ]+)",
+    remove = FALSE  ## 사용된 컬럼을 제거하는지
+  )
+```
+
+## Replacing Matches
+
+- `str_replace()`}`and`str_replace_all()\` allow you to replace matches with new strings. The simplest use is to replace a pattern with a fixed string:
+
+```{r}
+x <- c("apple", "pear", "banana")
+str_replace(x, "[aeiou]", "-")
+str_replace_all(x, "[aeiou]", "-")
+```
+
+## Splitting
+
+Use `str_split()` to split a string up into pieces. For example, we
+could split sentences into words:
+
+```{r}
+sentences %>%
+  head(5) %>%
+  str_split(" ")
+```
+
+- We can also request a maximum number of pieces:
+
+```{r}
+fields <- c("Name: Hadley", "Country: NZ", "Age: 35")
+fields %>% str_split(": ", n=2, simplify = TRUE)
+```
+
+- Instead of splitting up strings by patterns, you can also split up by character, line, sentence, and word `boundary()`s:
+
+```{r}
+x<- "This is a sentence. This is another sentence."
+str_view_all(x, boundary("word"))
+```
+
+```{r}
+str_split(x, " ")[[1]]
+```
+
+```{r}
+str_split(x, boundary("word"))[[1]]
+```
+
+# 6. Other Types of Pattern
+
+## Other Types of Pattern
+
+-   When you use a pattern that's string, it's automatically wrapped
+    into a call to `regex()`:
+
+-   `ignore_case = TRUE` allows characters to match either their
+    uppercase or lowercase forms. This always uses the current locale:
+
+```{r}
+bananas <-c("banana", "Banana", "BANANA")
+str_view(bananas, "banana")
+```
+
+```{r}
+str_view(bananas, regex("banana", ignore_case = TRUE))
+```
+
+-   `multiline = TRUE` allows `^` and `$` to match the start and end of
+    each line rather than the start and end of the complete string:
+
+```{r}
+x <- "Line 1\nLine 2\nLine 3"
+str_extract_all(x, "^Line")[[1]]
+```
+
+```{r}
+str_extract_all(x, regex("^Line", multiline = TRUE))[[1]]
+```
+
+-   `comments = TRUE` allows you to use comments and white space to make complex regular expressions more understandable. Spaces are ignored, as is everything after `#`. To match a literal space, you'll need to escape it :`\\\`
+
+```{r}
+phone <- regex("
+               \\(?     # optional opening parens
+               (\\d{3}) # area code
+               [)- ]    # optional closing parens, dash, or space
+               (\\d{3}) # another three numbers
+               [ -]     # optional space or dash
+               (\\d{3}) # three more numbers
+               ", comments = TRUE)
+str_match('123-456-7890', phone)
+```

@@ -1,0 +1,448 @@
+---
+title: "통계학특강"
+author: "강종경"
+header-includes: \usepackage{setspace}\doublespacing
+output:
+  pdf_document:
+    latex_engine: xelatex
+    extra_dependencies: ["kotex","amsmath"]
+    keep_tex: yes
+  word_document: default
+  html_document:
+    df_print: paged
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.11.2
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+mainfont: NanumGothic
+editor_options:
+  markdown:
+    wrap: sentence
+fontsize: 12pt
+---
+
+
+
+\newcommand{\bx}{\boldmath{x}}
+\newcommand{\bX}{\boldmath{X}}
+\newcommand{\by}{\boldmath{y}}
+\newcommand{\bY}{\boldmath{Y}}
+\newcommand{\bH}{\boldmath{H}}
+\newcommand{\bI}{\boldmath{I}}
+
+\newcommand{\btheta}{\boldsymbol{\theta}}
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+\newcommand{\bmu}{\boldsymbol{\mu}}
+\newcommand{\bepsilon}{\boldsymbol{\epsilon}}
+
+# 모형 선택과 벌점화(Model Selection and Regularization)
+
+## 부분집합 선택 방법
+
+### 최적 부분집합 선택(Best Subset Selection)
+
+여기서는 최고의 하위 집합 선택 접근 방식을 타자 데이터(`Hitters`)에 적용해보겠습니다. 전년도 성적과 관련된 다양한 통계를 바탕으로 야구 선수의 연봉을 예측해봅시다.
+
+```{r chunk1}
+library(ISLR2)
+head(Hitters)
+names(Hitters)
+dim(Hitters)
+```
+```{r chunk1-1}
+sum(is.na(Hitters$Salary))
+
+```
+```{r chunk1-2}
+Hitters <- na.omit(Hitters)
+dim(Hitters)
+sum(is.na(Hitters))
+```
+
+
+`leaps` 라이브러리에 있는 `regsubsets()` 함수는 주어진 수의 예측 변수를 포함하는 최적의 모델을 식별하여 최적의 부분집합 선택을 수행합니다. `summary()`를 통해 주어진 모형 크기에 대한 최적의 변수 집합을 출력합니다.
+
+
+```{r chunk2}
+library(leaps)
+regfit.full <- regsubsets(Salary ~ ., Hitters)
+summary(regfit.full)
+```
+별표"*" 는 주어진 변수가 해당 모형에 포함되어 있음을 나타냅니다. 예를 들어, 2-변수 모형에는 안타(Hits)와 CRBI(number of runs batted in during his career)만 포함되어 있음을 나타냅니다. 기본적으로 `regsubsets()`는 최적의 8-변수 모형까지만 결과를 보고합니다. 그러나 `nvmax` 옵션을 사용하면 원하는 만큼의 변수를 반환할 수 있습니다. 이제 19개의 변수 모형을 적합시켜 봅시다.
+
+```{r chunk2-1}
+regfit.full <- regsubsets(Salary ~ ., data = Hitters,
+    nvmax = 19)
+reg.summary <- summary(regfit.full)
+```
+
+`summary()`함수는 $R^2$, RSS(잔차 제곱합), 조정된 $R^2$, $C_p$, 그리고 
+BIC까지 출력해줍니다. 우리는 이러한 값들을 기준으로 하여 최적의 모형을 선택할 수 있습니다. 
+
+```{r chunk2-2}
+names(reg.summary)
+```
+
+예를 들어, $R^2$ 통계량은 모형에 변수가 하나만 포함된 경우 32\%에서 모든 변수가 포함된 경우 거의 55\%로 증가합니다. 예상대로 변수가 더 많이 포함될수록 $R^2$ 통계량은 단조 증가합니다.
+
+```{r chunk2-3}
+reg.summary$rsq
+```
+
+모든 모델에 대해 RSS, 조정된 $R^2$, $C_p$ 및 BIC를 한 번에 표시하면 어떤 모델을 선택할지 결정하는 데 도움이 됩니다. `type = "l"` 옵션은 `R`이 표시된 점을 선으로 연결하도록 지시합니다.
+
+
+```{r chunk3}
+par(mfrow = c(2, 2))
+plot(reg.summary$rss, xlab = "Number of Variables",
+    ylab = "RSS", type = "l")
+plot(reg.summary$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted RSq", type = "l")
+```
+
+`points()` 명령은 새 플롯을 생성하는 대신 이미 작성된 플롯에 점을 넣는다는 점을 제외하고 `plot()` 명령과 같이 작동합니다. `which.max()` 함수를 사용하여 벡터의 최대 점 위치를 식별할 수 있습니다. 이제 가장 큰 조정된 $R^2$ 통계량을 가진 모형을 나타내기 위해 빨간색 점을 표시합니다.
+
+
+```{r chunk3-1}
+which.max(reg.summary$adjr2)
+plot(reg.summary$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted RSq", type = "l")
+points(11, reg.summary$adjr2[11], col = "red", cex = 2, 
+    pch = 20)
+```
+
+비슷한 방법으로 $C_p$ 및 BIC 통계량을 표시하고 `which.min()`을 사용하여 가장 작은 통계량을 가진 모형을 표시할 수 있습니다.
+
+```{r chunk4}
+plot(reg.summary$cp, xlab = "Number of Variables",
+    ylab = "Cp", type = "l")
+cpmin<-which.min(reg.summary$cp)
+points(cpmin, reg.summary$cp[10], col = "red", cex = 2,
+    pch = 20)
+```
+    
+```{r chunk4-1}
+bicmin<-which.min(reg.summary$bic)
+plot(reg.summary$bic, xlab = "Number of Variables",
+    ylab = "BIC", type = "l")
+points(bicmin, reg.summary$bic[6], col = "red", cex = 2,
+    pch = 20)
+```
+`regsubsets()` 함수에는 BIC, $C_p$, 조정된 $R^2$ 또는 AIC에 따라 순위를 매긴 후, 주어진 수의 예측 변수에서의 최적 모형에 대해 선택된 변수들을 표시하는 데 사용할 수 있는 `plot()` 명령이 내장되어 있습니다.
+
+```{r chunk5}
+plot(regfit.full, scale = "r2")
+plot(regfit.full, scale = "adjr2")
+plot(regfit.full, scale = "Cp")
+plot(regfit.full, scale = "bic")
+```
+
+각 그림의 맨 위 행에는 해당 통계량과 관련된 최적 모형에 따라 선택된 각 변수에 대한 검은색 정사각형이 포함됩니다. 예를 들어, 여러 모델이 -150에 가까운 BIC를 공유한다는 것을 알 수 있습니다. 그러나 BIC가 가장 낮은 모델은 AtBat, Hits, Walks, CRBI, DivisionW 및 PutOuts만 포함하는 6개 변수 모델입니다. `coef()` 함수를 사용하여 이 모형과 관련된 계수 추정치를 확인할 수 있습니다.
+
+```{r chunk6}
+coef(regfit.full, 6)
+
+``` 
+
+### 전향/후향 단계적 선택법(Forward and Backward Stepwise Selection)
+
+`regsubset()` 함수의 옵션으로 `method = "forward"` 또는 `method = "backward"` 를 사용하여 전향 단계적 또는 후향 단계적 선택을 수행할 수 있습니다.
+
+```{r chunk7}
+regfit.fwd <- regsubsets(Salary ~ ., data = Hitters,
+    nvmax = 19, method = "forward")
+summary(regfit.fwd)
+regfit.bwd <- regsubsets(Salary ~ ., data = Hitters,
+    nvmax = 19, method = "backward")
+summary(regfit.bwd)
+```
+
+예를 들어, 전향 단계적 선택을 사용하면 최상의 1-변수 모델은 CRBI만 포함하며, 최적의 2-변수 모델에는 Hits가 추가로 포함되어 있음을 알 수 있습니다. 이 데이터의 경우 최적의 1-변수부터 6-변수까지의 모형은 최적 부분 집합 선택 방법과 전향 단계적 선택 방법에대해 각각 동일합니다. 그러나 전향 단계적 선택, 후향 단계적 선택 및 최적 부분집합 선택에 의해 식별되는 최적의 7가지 변수 모델은 다릅니다.
+
+
+```{r chunk8}
+coef(regfit.full, 7)
+coef(regfit.fwd, 7)
+coef(regfit.bwd, 7)
+```
+### 검증 자료 및 교차 검증을 통한 모형 선택
+
+우리는 앞서 $C_p$, BIC, 조정된 $R^2$를 사용하여 서로 다른 크기의 모형들을 비교하고 선택할 수 있다는 것 살펴보았습니다. 이제 검증 자료와 교차 검증 방식을 사용하여 모형 선택을 수행하는 방법을 알아보겠습니다.
+
+검증 자료방법은 관측자료를 훈련 자료와 시험 자료로 나누는 것으로 시작합니다. `train` 벡터는 해당 관측치가 훈련 자료에 있으면 `TRUE`, 그렇지 않으면 `FALSE`를 갖고, `test` 벡터는 관측치가 검정 집합에 있으면 `TRUE`이고 그렇지 않으면 `FALSE`입니다. `test` 벡터를 생성할 때 사용한,  `!` 명령은 `TRUE`를 `FALSE`로 전환시키고 그 반대도 마찬가지입니다. 또한 사용자가 차후에도 동일한 훈련자료/검증자료 분할을 얻을 수 있도록 무작위 시드도 설정합니다.
+
+```{r chunk9}
+set.seed(1)
+train <- sample(c(TRUE, FALSE), nrow(Hitters),
+    replace = TRUE)
+test <- (!train)
+```
+
+이제 훈련자료를 통해 최적 부분집합 선택을 수행해봅시다.
+```{r chunk10}
+regfit.best <- regsubsets(Salary ~ .,
+    data = Hitters[train, ], nvmax = 19)
+```
+
+`Hitters[train,]` 즉,`Hitters` 자료에서 훈련자료만을 호출하여 최적부분집합을 수행하였습니다. 이제 각 모형 크기에 따른 최적의 모형에 대한 시험 오차를 계산해봅시다. 이를 위해 먼저 시험 자료로 모형행렬(model matrix)를 만듭니다.
+
+```{r chunk11}
+test.mat <- model.matrix(Salary ~ ., data = Hitters[test, ])
+```
+
+`model.matrix()` 함수는 회귀모형을 보고 자료로부터 설명변수 행렬을 구축시켜줍니다. 이제 우리는 `for` 루프를 실행하고, 각각의 크기 `i`에 대해, `regit.best`에서 계수를 추출합니다. 그 다음 회귀계수와 그에 해당하는 적절한 시험자료의 열에 곱하여 예측값을 계산하고 시험 MSE를 계산합니다.
+
+```{r chunk12}
+val.errors <- rep(NA, 19)
+for (i in 1:19) {
+ coefi <- coef(regfit.best, id = i)
+ pred <- test.mat[, names(coefi)] %*% coefi
+ val.errors[i] <- mean((Hitters$Salary[test] - pred)^2)
+}
+```
+
+검증자료를 이용한 모형 선택 결과 7개의 변수를 사용한 모형이 최적의 모형으로 선택되었습니다.
+
+```{r chunk13}
+val.errors
+which.min(val.errors)
+coef(regfit.best, 7)
+```
+
+마지막으로 전체 자료에서 최적의 부분 집합 선택을 수행하고 최적의 7개 변수 모형을 선택합니다. 보다 정확한 계수 추정치를 얻기 위해서는 전체 자료를 사용하는 것이 좋습니다. 전체자료에서 최적의 7개 변수 모형은 훈련 자료에서의 최적의 7개 변수 모형과 다를 수 있습니다.
+
+```{r chunk15}
+regfit.best <- regsubsets(Salary ~ ., data = Hitters,
+    nvmax = 19)
+coef(regfit.best, 7)
+```
+
+실제로 전체 자료에서 최적의 7개 변수 모형은 훈련자료에서의 최적의 7개 변수형과 다른 변수를 선택했습니다.
+
+우리는 이제 교차 검증을 사용하여 다양한 크기의 모형 들을 비교-선택해보겠습니다. 각 $k$ 훈련 자료 내에서 최적의 하위 집합 선택을 수행해야 하기 때문에 이 접근 방식은 다소 복잡합니다. 먼저, 우리는 각 관측치를 `k=10` 단(fold) 중 하나에 할당하는 벡터를 만들고, 그 결과를 저장할 행렬을 만듭니다.
+
+
+```{r chunk16}
+k <- 10
+n <- nrow(Hitters)
+set.seed(1)
+folds <- sample(rep(1:k, length = n))
+cv.errors <- matrix(NA, k, 19,
+    dimnames = list(NULL, paste(1:19)))
+```
+
+
+`regsubsets()`함수에는 `predict()` 함수가 적용되지 않아서 다소 번거로웠습니다. 앞으로도 `regsubset()`를 이용하여 예측을 자주 사용할 것이기 때문에 다음과 같이 예측함수를 만들어보겠습니다.
+
+```{r chunk14}
+ predict.regsubsets <- function(object, newdata, id, ...) {
+  form <- as.formula(object$call[[2]])
+  mat <- model.matrix(form, newdata)
+  coefi <- coef(object, id = id)
+  xvars <- names(coefi)
+  mat[, xvars] %*% coefi
+ }
+```
+
+이제 교차 검증을 수행하는 `for` 루프를 작성한다. j번째 단에서는 j와 동일한 단이 검증자료에 있고 나머지는 훈련자료에 있습니다. 새롭게 만든 `predict()` 함수를 사용하여 각 모형 크기에서의 예측을 하고, 적절한 하위 집합에 대한 시험오차를 계산한 다음 행렬 `cv.errors`의 해당 슬롯에 저장합니다. 다음 코드에서 `R`은 `predict()`를 호출할 때 자동으로 `predict.regsubsets()` 함수를 사용합니다. 왜냐면 `best.fit` 객체는 `regsubsets`라는 클래스를 갖고 있기 때문입니다. 
+
+```{r chunk17}
+for (j in 1:k) {
+  best.fit <- regsubsets(Salary ~ .,
+       data = Hitters[folds != j, ],
+       nvmax = 19)
+  for (i in 1:19) {
+    pred <- predict(best.fit, Hitters[folds == j, ], id = i)
+    cv.errors[j, i] <-
+         mean((Hitters$Salary[folds == j] - pred)^2)
+   }
+ }
+```
+
+이를 통해 $(j,i)$ 성분이 최적 $i$-변수 모형의 $j$단의 교차검증 시험 오차인 $10 \times 19$ 행렬을 계산하였습니다. `apply()`함수를 이용하여 최적 $i$-변수 모형의 교차검증 오차를 계산하고, 그 결과를 그려봅시다.
+
+```{r chunk18}
+mean.cv.errors <- apply(cv.errors, 2, mean)
+mean.cv.errors
+par(mfrow = c(1, 1))
+plot(mean.cv.errors, type = "b")
+```
+
+교차검증은 10-변수 모형을 선택하였습니다. 이제 10-변수 모형에서의 계수를 보다 정확하게 계산하기위해 전체 자료를 이용하여 다시 적합시킵니다.
+
+```{r chunk19}
+reg.best <- regsubsets(Salary ~ ., data = Hitters,
+    nvmax = 19)
+coef(reg.best, 10)
+```
+
+## 능형회귀와 라쏘(Ridge Regression and the Lasso)
+
+능형 회귀(ridge regression)와 라쏘(Lasso)를 수행하기 위해 `glmnet` 패키지를 사용합니다. 이 패키지의 주요 함수는 `glmnet()`으로, 능형 회귀 모형, 라쏘 모형 등을 적합시키는 데 사용할 수 있습니다. 앞선 회귀모형들이 모형 공식을 활용했던 것과 달리,  이 함수는 $x$ 행렬과 $y$ 벡터를 직접 전달해야 합니다. 이제 타자의 연봉 데이터를 예측하기 위해 능형 회귀 분석과 라쏘를 수행하겠습니다. 
+
+```{r chunk20}
+x <- model.matrix(Salary ~ ., Hitters)[, -1]
+y <- Hitters$Salary
+```
+
+`model.matrix()` 함수는 19개의 예측 변수에 해당하는 행렬을 생성할 뿐만 아니라 모든 질적 변수를 더미(dummy) 변수로 자동 변환합니다. `glmnet()`은 수치적이고 정량적인 입력만 취할 수 있기 때문에 이러한 특성은 매우 유용합니다.
+
+### 능형회귀(Ridge regression)
+
+`glmnet()` 함수의 인수 중에는 적합 모형 유형을 결정하는 `alpha`가 있습니다. `alpha=0`이면 능형 회귀 모형이 적합하고 `alpha=1`이면 라쏘 모형이 적합됩니다. 먼저 능형 회귀 모형을 적합시킵니다.
+
+```{r chunk21}
+library(glmnet)
+grid <- 10^seq(10, -2, length = 100)
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid)
+```
+
+기본적으로 `glmnet()` 함수는 자동으로 선택된 $\alpha$값의 범위에 대해 능형 회귀 분석을 수행합니다. 그러나 여기서 우리는 $\alpha=10^10$에서 $\alpha=10^{-2}$까지의 범위의 격자값에 대해 함수를 구현하기로 설정하였으며, 이는 기본적으로 절편만을 포함하는 영 모형(null model)부터 최소 제곱 모형까지 모든 범위의 시나리오를 다룹니다. 물론 격자값 중 하나가 아닌 $\alpha$의 특정 값에 대한 모형 적합치도 계산할 수 있습니다. 기본적으로 `glmnet()` 함수는 변수가 동일한 척도에 있도록 표준화합니다. 이 기본 설정을 해제하려면 `standardize = FALSE` 인수를 사용하면 됩니다.
+
+각 $\alpha$ 값과 연관된 능형 회귀 계수의 벡터를 `coef()`함수를 이용하여 살펴볼 수 있습니다. 여기서는 20개의 행(예측 변수마다 하나씩)과 100개의 열($\alpha$의 각 값마다 하나씩)이 있는 $20\times 100$ 행렬입니다.
+
+
+```{r chunk22}
+dim(coef(ridge.mod))
+```
+우리는 $\lambda$가 커질 수록 $\ell_2$ 노름(norm)의 측면에서 계수의 추정치들이 더 작게 추정될 것이라고 예상할 수 있습니다. $\lambda=11,498$일 때의 계수와 $\ell_2$ 노름은 다음과 같습니다.
+
+```{r chunk23}
+ridge.mod$lambda[50]
+coef(ridge.mod)[, 50]
+sqrt(sum(coef(ridge.mod)[-1, 50]^2))
+```
+$\lambda=705$일 때의 계수외 $\ell_2$ 노름은 다음과 같으며, 계수들이 $\ell_2$ 노름 측면에서 더 증가하였음을 확인할 수 있습니다.
+
+```{r chunk24}
+ridge.mod$lambda[60]
+coef(ridge.mod)[, 60]
+sqrt(sum(coef(ridge.mod)[-1, 60]^2))
+```
+
+`predict()`함수를 이용하여 우리는 다양한 값들을 얻을 수 있습니다. 예를들어 새로운 $\lambda$값 (여기서는 50)에 대한 능형회귀계수를 얻을 수 있습니다. 
+
+
+```{r chunk25}
+predict(ridge.mod, s = 50, type = "coefficients")[1:20, ]
+```
+
+이제 우리는 표본자료를 훈련자료와 시험자료로 분할하여 능형 회귀와 라쏘의 시험오차를 추정해봅시다. 자료를 랜덤하게 분할하는 두 가지 일반적인 방법이 있습니다. 첫 번째는 앞에서 사용했듯이 `TRUE`, `FALSE` 요소의 랜덤 벡터를 생성하고 훈련 데이터에 대해 `TRUE`에 해당하는 관측치를 선택하는 것입니다. 두 번째는 1과 $n$ 사이의 숫자의 부분 집합을 랜덤하게 선택하는 것입니다. 그런 다음 이 부분 집합을 교육 관측치의 지수로 사용할 수 있습니다. 여기서는 우리는 두번째 접근 방식을 이용해봅시다.  재현될 수 있는 결과를 얻도록 무작위 시드를 설정합시다.
+
+```{r chunk26}
+set.seed(1)
+train2 <- sample(1:nrow(x), nrow(x) / 2)
+test2 <- (-train2)
+y.test <- y[test2]
+```
+
+다음으로, 우리는 훈련자료를 이용하여 능형회귀모형을 적합하고,   $\lambda=4$를 사용하여 시험자료에서 MSE를 평가해봅시다. `predict()` 함수에서 이번에는 `type="coefficient"`를 `newx` 인수로 대체하여 검정 집합에 대한 예측을 얻었습니다.
+
+```{r chunk27}
+ridge.mod <- glmnet(x[train2, ], y[train2], alpha = 0,
+    lambda = grid, thresh = 1e-12)
+ridge.pred <- predict(ridge.mod, s = 4, newx = x[test2, ])
+mean((ridge.pred - y.test)^2)
+```
+
+시험 MSE는 142,199입니다. 대신 단순히 절편만으로 모형을 적합했다면 훈련 관측치의 평균을 사용하여 각 시험 관측치를 예측했을 것입니다. 이 경우, 다음과 같이 테스트 세트 MSE를 계산할 수 있습니다.
+
+```{r chunk28}
+mean((mean(y[train2]) - y.test)^2)
+```
+
+매우 큰 $\lambda$값을 이용하여 능선 회귀 모형을 적합시켜도 위와 동일한 결과를 얻을 수 있습니다. `1e10`은 $10^10$을 의미합니다.
+
+```{r chunk29}
+ridge.pred <- predict(ridge.mod, s = 1e10, newx = x[test2, ])
+mean((ridge.pred - y.test)^2)
+```
+따라서 $\lambda=4$로 능형 회귀 모형을 적합하면 절편만으로 모형을 적합하는 것보다 시험 MSE가 훨씬 낮습니다. 이제 우리는 최소 제곱법을 수행하는 대신 $\lambda=4$인 능형 회귀를 수행하는 것이 어떤 이점이 있는지 확인해봅시다. 최소 제곱은 단순히 $\lambda=0$인 능형 회귀 분석임을 기억하세요.
+
+```{r chunk30}
+ridge.pred <- predict(ridge.mod, s = 0, newx = x[test2, ],
+    exact = T, x = x[train2, ], y = y[train2])
+mean((ridge.pred - y.test)^2)
+```
+일반적으로 (벌칙화되지 않은) 최소 제곱 모형을 적합시키려면 `lm()` 함수를 사용하는 것을 권장합니다. `lm()`은 계수에 대한 표준 오차 및 $p$-값과 같은 더 유용한 출력을 제공하기 때문입니다. 
+
+```{r chunk30-1}
+lm(y ~ x, subset = train2)
+predict(ridge.mod, s = 0, exact = T, type = "coefficients",
+    x = x[train2, ], y = y[train2])[1:20, ]
+```
+
+임의로 $\lambda=4$를 선택하는 대신 교차 검증을 사용하여 조율모수 $\lambda$를 선택하는 것이 좋습니다. 내장된 교차 검증 함수인 `cv.glmnet()`을 사용하여 이 작업을 수행할 수 있습니다. 기본적으로 함수는 10-단 교차 검증(10-fold CV)을 수행하지만 인수 `nfolds`를 사용하여 변경할 수 있습니다. 교차 검증 단(fold)의 선택은 무작위이므로, 재현가능한 결과를 얻기 위해 시드를 설정합니다.
+
+```{r chunk31}
+set.seed(1)
+cv.out <- cv.glmnet(x[train2, ], y[train2], alpha = 0)
+plot(cv.out)
+```
+
+```{r chunk31-1}
+bestlam <- cv.out$lambda.min
+bestlam
+```
+교차검증 오차가 가장 작은 $\lambda$값은 326입니다. 이 을 이용한 시험 MSE를 계산해봅시다.
+
+```{r chunk32}
+ridge.pred <- predict(ridge.mod, s = bestlam,
+    newx = x[test2, ])
+mean((ridge.pred - y.test)^2)
+```
+
+이는 $\lambda=4$를 사용하여 얻은 시험 MSE보다 더 향상된 결과를 나타냅니다. 마지막으로 교차 검증에 의해 선택된 $\lambda$ 값을 사용하여 전체 자료에서의 능형 회귀 모델을 다시 적용하고 계수 추정치를 조사해봅시다.
+
+```{r chunk33}
+out <- glmnet(x, y, alpha = 0)
+predict(out, type = "coefficients", s = bestlam)[1:20, ]
+```
+
+예상대로 모든 계수가 0이 아닙니다. 능형 회귀 분석에서는 변수 선택이 수행되지 않기 때문입니다!
+
+
+### 라쏘(Lasso)
+
+$\lambda$가 적절하게 선택되었을 때, 능형 회귀가 최소 제곱회귀모형보다 시험MSE 관점에서 더 좋은 모형을 생성함을 Hitters 자료를 통해 살펴보았습니다. 이제 우리는 라쏘가 능형 회귀 분석보다 더 정확하거나 해석 가능한 모델을 산출할 수 있는지 조사해봅시다. 라쏘 모형을 맞추기 위해 `alpha=1` 로 바꾸어 `glmnet()` 함수를 사용하겠습니다. 
+
+```{r chunk34}
+lasso.mod <- glmnet(x[train2, ], y[train2], alpha = 1, lambda = grid)
+plot(lasso.mod)
+```
+
+계수그림 (coefficient plot) 통해 조율모수의 선택에 따라 일부 계수가 정확히 0과 같다는 것을 알 수 있습니다. 이제 교차 검증을 수행하고 시험오차를 계산해봅시다.
+
+
+```{r chunk35}
+set.seed(1)
+cv.out <- cv.glmnet(x[train2, ], y[train2], alpha = 1)
+plot(cv.out)
+```
+
+```{r chunk35-1}
+bestlam <- cv.out$lambda.min
+lasso.pred <- predict(lasso.mod, s = bestlam,
+    newx = x[test2, ])
+mean((lasso.pred - y.test)^2)
+```
+이는 영모형 및 최소 제곱 모형의 시험 MSE보다 상당히 낮으며 교차 검증에 의해 선택된 $\lambda$를 사용한 능형 회귀의 테스트 MSE와 매우 유사하다.
+
+그러나 라쏘는 변수선택을 수행한다는 점에서 능형 회귀에 비해 상당한 이점이 있습니다. 19개의 계수 추정치 중 8개가 정확히 0이라는 것을 알 수 있습니다. 따라서 교차 검증에 의해 선택된 $\lambda$의 라소 모형에는 11개의 변수만 포함됩니다.
+
+
+```{r chunk36}
+out <- glmnet(x, y, alpha = 1, lambda = grid)
+lasso.coef <- predict(out, type = "coefficients",
+    s = bestlam)[1:20, ]
+lasso.coef
+lasso.coef[lasso.coef != 0]
+```

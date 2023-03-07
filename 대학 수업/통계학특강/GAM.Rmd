@@ -1,0 +1,653 @@
+---
+title: "통계학특강"
+author: "강종경"
+header-includes: \usepackage{setspace}\doublespacing
+output:
+  html_document:
+    df_print: paged
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+    extra_dependencies: kotex
+    keep_tex: yes
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.11.2
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+mainfont: NanumGothic
+editor_options:
+  markdown:
+    wrap: sentence
+fontsize: 12pt
+---
+
+
+
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\bX}{\mathbf{X}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bY}{\mathbf{Y}}
+\newcommand{\btheta}{\boldsymbol{\theta}}
+\newcommand{\bbeta}{\boldsymbol{\beta}}
+
+
+# 일반화 가법 모형 (Generalized Additive Model)
+
+모형에 관한 선형성(linearity) 가정은 충분히 의미있기는 하지만 일반적으로는 거의 성립하지 않습니다. 이 경우 우리는 다항식(polynomial), 계단 함수(step function), 스플라인(spline), 국소 회귀(local regression), 그리고 일반화 가법 모형(generalized additive model) 등을 생각할 수 있습니다. 
+
+* **다항 회귀(polynomial regression)**는 원래의 예측 변수 각각을 거듭제곱하여 얻은 예측 변수를 추가함을 통해 선형 모형을 확장합니다. 예를 들어 입방체(cubic) 회귀분석에서는 $X$, $X^2$, 그리고 $X^3$의 세 변수를 예측 변수로 활용합니다.
+
+* **계단 함수(step function)**는 변수의 범위를 $k$개의 개별 영역으로 분할하여 질적 변수를 만듭니다. 이 함수는 구간 상수 함수를 적합시키는 효과를 가집니다.  
+
+* **회귀 스플라인(regression spline)**은 보다 유연하게 다항식 및 단계 함수를 확장시킵니다. 여기서는 $X$의 범위를 $k$개의 개별 영역으로 분할하고, 각 영역 내에서 다항식 함수를 사용하여 데이터를 적합시킵니다. 선택한 다항식 함수는 매듭(knot)이라고 하는 영역 경계에서 원활하게 적합되도록 제약됩니다. 충분한 수의 개별 영역으로 분할함을 통해 회귀 스플라인은 매우 유연한 적합을 제공할 수 있습니다.
+
+* **국소 회귀(local regression)**는 스플라인과 유사하지만, 여기서는 영역이 중복될 수 있습니다. 이러한 겹치는 영역은 보다 부드러운 모형을 부드럽게(smooth) 합니다. 
+
+* **일반화 가법 모형(generalized additive model)**은 앞서 다룬 다항식, 단계함수, 스플라인, 국소 회귀 등을 여러 변수에 대해 확장시킨 모형입니다. 
+
+## 다항 회귀(Polynomial Regression)
+
+예측 변수와 반응 변수 사이의 관계가 비선형(non-linear)인 정황이 포착될 경우, 일반적인 선형 회귀 모형
+
+$$
+y_i=\beta_0+\beta_1 X_1 +\epsilon_i
+$$
+을 다음과 같은 다항함수 형태로 바꿔서 적합할 수 있으며, 이를 다항 회귀라고 합니다. 
+$$
+y_i=\beta_0+\beta_1 X_i + \beta_2 X_i^2 +\cdots + \beta_d X_i^d + \epsilon_i
+$$
+충분히 큰 $d$를 선택함을 통해 다항 회귀는 매우 유연한 곡선을 생성할 수 있지만, $d$의 값이 지나치게 큰 경우, $X$의 경계 부근에서의 적합된 모양이 이상할 수 있기 때문에 일반적으로 3, 4차 정도의 다항식을 고려하게 됩니다. 다항 회귀 모형 역시 각 항에 대해서는 반응변수 $y$와 선형 관계를 갖기 때문에 새로 생성한 다항 항들을 설명변수로하는 최소 제곱 회귀를 적합시킴을 통해 쉽게 회귀계수를 추정할 수 있습니다. 다항회귀에서는 추정된 회귀계수 자체 보다는 특정 관측값 $x_0$에서의 적합 함수에 대해 관심을 갖습니다.
+
+$$
+\hat{f}(x_0)= \hat{\beta}_0 +\hat{\beta}_1x_0 + \hat{\beta}_2 x_0^2 + \cdots + \hat{\beta}_d x_0^d 
+$$
+
+적합 함수값 $\text{Var}\hat{f}(x_0)$의 분산은 회귀계수 벡터의 추정량 $\hat{\bbeta}$의 분산-공분산 행렬 $\hat{C}$을 이용하여 계산할 수 있습니다. 만약 $\ell_0=(1, x_0, x_0^2, \cdots, x_0^d)^T$라고 하면, $\text{Var}\hat{f}(x_0)=\ell_0^T\hat{C}\ell_0$ 이며, 표준오차는 이 값의 제곱근입니다. 
+ 
+## 계단 함수(step function)
+
+계단 함수는 $X$의 범위를 여러 구간으로 나눈 뒤 각 구간에 서로 다른 상수값을 적합시킵니다. 이는 연속형 변수를 순서 있는 범주형 변수로 변환하여 적합시키는 것과 같습니다. 
+
+먼저 $X$의 범위를 $K$개의 분할 점 $c_1, c_2, \dots, c_K$을 이용하여 $K+1$ 개의 새로운 변수를 생성합니다
+\begin{align*}
+C_0(X)&=I(X<c_1)\\
+C_1(X)&=I(c_1  \le X < c_2)\\
+&\cdots\\
+C_{K-1}(X) &=I(c_{K-1} \le X <c_K)\\
+C_K(X) &= I(c_{K} \le X)
+\end{align*}
+여기서  $I$는 지시함수(indicator function)으로 조건이 참일 때 1의 값을 갖습니다.
+
+$X$는 $K+1$개의 변수 $C_0(X), C_1(X), \dots, C_K(X)$ 중 하나의 값에서만 1의 값을 갖고, 나머지 값에서는 0의 값을 갖습니다. 즉,
+
+$$
+C_0(X) + C_1(X) + \cdots + C_K(X) = 1
+$$
+을 만족합니다. 이와같이 생성한 새로운 변수들을 예측 변수로 하여 다음과 같은 모형을 적합시킬 수 있습니다.
+
+$$
+y_i = \beta_0 + \beta_1 C_1(X_i)+ \beta_2 C_2(X_i) + \dots + \beta_K C_K (X_i) + \epsilon_i
+$$
+$X < c_1$인 경우, 모든 설명변수는 0의 값을 갖습니다. 즉, $\beta_0$는 $X<c_1$인 경우에서의 $Y$의 평균 값이라고 해석할 수 있습니다. 이와 같은 방법으로 $c_j \le X <c_{j+1}$ 인 경우에 회귀 모형은 $\beta_0 + \beta_j$가 되며, $\beta_j$는 $X< c_1$일 때에 대비해서 $c_j \le X <c_{j+1}$ 일 때의 평균 반응의 증가분을 나타냅니다. 
+
+중단점의 선택에 따라 회귀 모형이 달라지므로, 이 점을 유의해야 합니다. 
+
+```{r main1, eval =TRUE, echo = FALSE}
+library(ISLR2)
+attach(Wage)
+fit <- lm(wage ~ cut(age , 4), data = Wage)
+agelims <- range(age)
+age.grid <- seq(from = agelims[1], to = agelims [2])
+preds <- predict(fit , newdata = list(age = age.grid), se = TRUE)
+se.bands <- cbind(preds$fit + 2 * preds$se.fit , preds$fit - 2 * preds$se.fit)
+
+plot(age , wage , xlim = agelims , cex = .5, col = "darkgrey", main="Step function")
+lines(age.grid, preds$fit , lwd = 2, col = "blue")
+matlines(age.grid , se.bands, lwd = 1, col = "blue", lty = 3)
+```
+
+다음은 실습에서 살펴볼 `Wage`데이터를 계단 함수를 이용하여 적합한 그림입니다. 첫 계단에서는 `age`에 따른 `wage`의 증가 경향을 반영하지 못하고 있습니다. 
+
+
+## 기저 함수(basis functions)
+
+다항함수나 계단 함수는 기저 함수 방법(basis function approach)의 특별한 경우로 볼 수 있습니다. 기저 함수 방법은 변수 $X$의 함수 값 또는 변환들의 집합을 이용합니다. 
+
+$$
+X: b_1(X), b_2(X), \dots, b_K(X)
+$$
+즉, 선형 모형에서 $X$를 적합시키는 대신 이와 같은 $X$의 기저 함수값들을 모형에 이용하는 것입니다. 
+
+$$
+y_i = \beta_0 + \beta_1 b_1(x_i)+ \beta_2 b_2(x_i) + \dots + \beta_K b_K(x_i) +  \epsilon_i
+$$
+다항 회귀의 경우 기저 함수들은 $b_j(x_i)= x_i^j$가 됩니다. 계단 함수의 경우 기저 함수들은 $b_j(x_i) = I(c_j \le x_i < c_{j+1})$이 됩니다. 
+
+기저함수 모형 역시 새로운 예측변수 $b_1(x_i), b_2(x_i), \dots, b_K(x_i)$에 대한 선형모형이므로, 최소 제곱 방법을 통해 회귀 계수를 추정할 수 있습니다. 또한 선형 모형에서 수행했던 여러 통계적 추론도 수행할 수 있습니다. 
+
+## 회귀 스플라인 (regression spline)
+
+가장 단순한 스플라인은 구간 다항 함수 (piecewise polynomial function)입니다. 구간 다항 회귀는 $X$의 전 범위에 걸쳐 고차 다항식을 적합시키는 대신 $X$의 여러 영역에 걸쳐 개별적인 저차원 다항식을 적합시킵니다. 예를들어 구간 큐빅(cubic) 다항 회귀에서는 다음과 같은 3차 다항 회귀를 적합시킵니다.
+
+$$
+y_i = \beta_0 + \beta_1 x_i + \beta_2 x_i^2 +\beta_3 x_i^3 +\epsilon_i
+$$
+
+하지만 회귀계수 $\beta_0, \beta_1, \beta_2, \beta_3$은 $X$가 속한 영역에 따라 달라집니다. 이렇게 회귀계수가 달라지는 지점을 매듭(knot)이라고 합니다. 회귀 스플라인에서는 $X$의 범위를 $K$개의 매듭을 이용하여 나누어 $K+1$개의 서로 다른 영역에 선택된 함수(상수, 선형, 입방형 등..)를 적합시킵니다. 만약 $d$차 구간 다항 회귀를 수행한다면, 자유도는 $d \times (K + 1)$이 됩니다. 이렇게 생성된 구간 함수들은 각 매듭에서 연속이 아니게 될 것입니다. 이 문제를 해결하기 위해서는 적합 곡선이 연속이어야한다는 제약을 가할 수 있지만, 부드러운 곡선은 아닐 수 있습니다. 적합 곡선에 연속이면서 부드러운 곡선을 갖게 하기 위해서 구간 다항식의 도함수에 추가적인 제약조건을 둘 수 있을 것입니다. 
+예를 들어 큐빅 스플라인의 경우  3차 구간 다항식이 각 매듭에서 연속이고, 1차 및 2차 다항식이 연속이라는 제약을 가할 수 있을 것입니다. 이 경우, 각 3차 구간 다항식의 자유도는 1이 됩니다. 따라서, $K$개의 매듭을 사용한 큐빅 스플라인의 자유도는 총 $4+K$가 됩니다. 
+
+
+## 스플라인 기저 표현 (spline basis representation)
+
+앞서 살펴본 기저 모형을 이용하여 회귀 스플라인을 표현할 수 있습니다. 예를들어 $K$개의 매듭을 이용한 큐빅 스플라인 모형은 적절한 기저함수들을 이용하여 다음과 같이 표현 할 수 있습니다.
+
+$$
+y_i = \beta_0 +\beta_1 b_1(x_i)+\beta_2 b_2(x_i) + \dots + \beta_{K+3} b_{K+3}(x_i)+\epsilon_i
+$$
+위의 모형 역시 최소 제곱법을 통해 적합시킬 수 있습니다. 큐빅 스플라인을 나타내는 방법에는 여러가지가 있겠지만 가장 널리 사용되는 방법은 3차 다항 회귀를 먼저 적합한 뒤 각 매듭에 절단된 멱기저함수(truncated power basis function)를 더하는 것입니다. 절단된 멱기저함수는 각 노트 $\xi$에 대해 다음과 같이 정의됩니다. 
+
+$$
+h(x, \xi)=(x-\xi)_{+}^{3}=\left\{\begin{array}{cc}
+(x-\xi)^{3} & \text { if } \mathrm{x}>\xi \\
+0 & \text { 그 외 }
+\end{array}\right.
+$$
+$h(x, \xi)$는 $\xi$에서 2차 미분계수 까지 0의 값을 가지므로, 오직 3차 미분계수만 불연속인 특징을 가집니다. 이와 같이 $K$개의 매듭 $\xi_1, \xi_2, \dots, \xi_K$을 이용하여 3차 스플라인을 적합시킨다는 것은 $K+3$개의 예측변수 $X, X^2, X^3, h(X, \xi_1), h(X, \xi_2), \dots, h(X, \xi_K)$와 절편을 이용한 선형 모형을 적합시키는 것을 의미합니다. 2차 미분계수까지 연속을 가지는 특성으로 인해 큐빅 스플라인이 널리 이용되고 있습니다. 예측 변수의 범위의 경계에서 스플라인의 분산이 클 수 있습니다. 이를 방지하기 위해 처음 영역에서의 함수를 선형으로 강제하는 자연 스플라인(natural spline)을 사용할 수 있습니다. $K$개의 매듭을 활용한 자연 스플라인의 자유도는 $K$가 됩니다. 
+
+회귀 스플라인은 매듭이 많을 수록 유연한(flexible) 곡선을 형성합니다.  일반적인 관행은 매듭을 균일하게 배치하는 것이지만, 그래프의 산포를 살펴본 뒤 함수가 가장 많이 변동할 것으로 예측되는 부분에 매듭을 많이 배치하고, 보다 안정적일 수 있는 부분에 매듭을 적게 배치할 수도 있습니다. 매듭의 수와 위치를 결정하기 위해 교차 검증(cross validation)이 널리 이용됩니다. 
+
+적절한 수와 위치의 매듭을 활용한 회귀 스플라인은 다항식 회귀 분석보다 우수한 성능을 보이는 경우가 많습니다. 유연한 적합을 만들기 위해 높은 치수를 사용해야 하는 다항식과 달리 스플라인은 차수를 고정시키는 대신 매듭 수를 늘릴 수 있습니다. 스플라인은 또한 가장 필요한 함수의 부분에 매듭을 분산시킬 수 있으며, 이를 통해 보다 안정적인 추정치를 산출할 수 있습니다.
+
+## 평활 스플라인(smoothing spline)
+
+평활 스플라인은 스플라인을 생성하기 위해 조금 다른 접근 방식을 취합니다. 다음과 같은 최적화 문제를 생각해봅시다.
+
+$$
+\min_{g \in \mathcal{S}} \sum_{i=1}^{n}(y_i -g(x_i))^2 +\lambda \int g''(t)^2 dt
+$$
+데이터 셋에 잘 맞는 평활 곡선을 적합시키려면 위 식의 처음 항인 잔차 제곱합이 작은 데이터에 잘 맞는 함수 $g(X)$를 찾는 것이 이상적일 것입니다. 그러나 $g(X)$에 아무런 제약이 없으면 모든 데이터를 보간(interpolate)하고 잔차제곱합이 0인 함수 $g(X)$를 생성할 수 있지만 이는  유연성이 지나치게 높으며 데이터에 과적합하게 됩니다. 따라서 잔차제곱합을 작게 하면서도 충분히 부드러운 함수 $g(X)$를 찾기 위해 위 식과 같이 $\lambda>0$를 통해 함수의 2차 도함수의 크기에 벌점(penalty)을 부과하여 함수의 부드러운 정도를 조절합니다. 벌점항
+
+$$
+\lambda  \int g''(t)^2 dt
+$$
+을 보다 자세히 살펴봅시다. 함수의 1차 도함수는 $t$에서의 기울기를 의미하며, 2차 도함수는 $t$에서의 기울기의 변화를 의미합니다. 바꿔말하면
+벌점항은 $g(X)$의 기울기의 변화율을 측정하며, 이는 함수의 거칠기를 나타내는 척도라고 할 수 있습니다 .$g(t)$가 $t$ 부근에서 변화가 크다면 $g''(t)^2$은 그 값이 클 것이고, $t$ 부근에서 $g(t)$가 평활하면 0에 가까울 것입니다. 예를 들어, 직선의 2차 도함수는 완전히 매끄럽기 때문에 $0$입니다. 모든 $X$값에서의 함수의 변화를 측정하기 위해 적분을 이용하였으며, 따라서 위와 같은 벌점항은 전체 범위에서의 $g'(t)$의 변화를 측정합니다. 조율모수(tunning parameter) $\lambda$는 함수의 평활 정도를 조절합니다. $\lambda=0$인 경우 벌점항은 잔차제곱합에 전혀 영향을 미치지 않기 때문에, 매우 불안정한 곡선으로 적합됩니다. $\lambda$가 크면 클 수록 $g$는 더 평활해지며, $\lambda$가 무한대로 간다면 $g''(t)$는 모든 범위에서 0으로 강제되므로, 선형 최소 제곱으로 적합됩니다. 
+
+### 정리
+
+$[a,b]$에서 정의되고 $g''$가 적분 가능한 함수 $g$를 생각해보자. 그리고 $\tilde{g}$를 $[a,b]$ 내의 $N$개의 자료 $x_1, x_2, \dots, x_N$에서 매듭을 갖고, 아래 식을 만족하는 자연 큐빅 스플라인이라고 하자. 
+$$ g(x_i)= \tilde{g(x_i)}, \qquad i=1, 2, \dots, N\\
+a<x_1<x_2<\dots<x_N<b$$
+그러면 다음 식이 만족한다.
+$$
+\int_{a}^{b} g''^2(t)dt \ge \int_{a}^{b}\tilde{g}''^2(t)dt
+$$
+
+### 증명
+
+임의의 $x \in [a,b]$에 대해, $h(x) = g(x) - \tilde{g}(x)$로 정의된 함수를 $h$라고 하자. $g(x)=h(x)+\tilde{g}(x)$이므로,
+\begin{equation}\tag{1}
+\int_{a}^{b} g''^2(t)dt = \int_{a}^{b}h''(t)+2h''(t)\tilde{g}''(t)+\tilde{g}''^2(t)dt
+\end{equation}
+식 (1)의 우변의 가운데 항을 살펴보면
+\begin{align*}
+\int_{a}^{b}h''(t)\tilde{g}''(t)dt &= h'(t)\tilde{g}''(t)|_{a}^{b}-\int_{a}^{b}h'(t)\tilde{g}'''(t)dt\\
+&=h'(b)\tilde{g}''(b)-h'(a)\tilde{g}''(a)-\int_{a}^{b}h'(t)\tilde{g}'''(t)dt
+\end{align*}
+
+한편 자연 큐빅 스플라인함수 $\tilde{g}(x)$는  $[a,x_1]$과 $[x_N,b]$ 에서 일차함수이므로 2차 미분계수는 0이다 즉, $\tilde{g}''(a)=\tilde{g}''(b)=0$이므로,
+\begin{align*}
+\int_{a}^{b}h''(t)\tilde{g}''(t)dt&=-\int_{a}^{b}h'(t)\tilde{g}'''(t)dt\\
+&=-\int_{a}^{x_1}h'(t)\tilde{g}'''(t)dt-\int_{x_1}^{x_2}h'(t)\tilde{g}'''(t)dt-\cdot-\int_{x_N}^{b}h'(t)\tilde{g}'''(t)dt\\
+&=-\tilde{g}'''(a)\int_{a}^{x_1}h'(t)dt-\tilde{g}'''(x_2)\int_{x_1}^{x_2}h'(t)dt-\cdot-\tilde{g}'''(x_N)\int_{x_N}^{b}h'(t)dt\\
+&=-c_1[h(x_2)-h(x_1)]-\cdots-c_N[h(x_N)-h(x_{N-1})]\\
+&=0
+\end{align*}
+이다. 여기서 $c_i = g'''(x_i)$ 이며, $g'''(a)=g'''(x_{N})=0$을 이용하였다. 따라서
+\begin{align*}
+\int_{a}^{b} g''^2(t)dt &= \int_{a}^{b}h''(t)+\tilde{g}''^2(t)dt\\
+    &\ge \tilde{g}''^2(t)dt
+\end{align*}
+이다. 
+
+보다 기술적인 증명을 통해 평활 스플라인은 모든 자룟값 $x_1, \dots, x_N$에서 매듭을 갖는 자연 큐빅 스플라인이라는 것을 증명할 수 있습니다. 하지만 앞서 살펴봤던 기저를 기반으로한 자연 큐빅 스플라인과는 차이가 있습니다. 왜냐하면 여기서는 $\lambda$에 의해 함수값이 축소추정되기 때문입니다. 
+
+$\lambda$는 이 밖에도 평활 스플라인의 유효 자유도(effective degrees of freedom)을 조절하는 역할을 합니다. 만약 $\lambda$가 0에서 무한대로 증가한다면 자유도는 $n$에서 $2$로 줄어듦을 보일 수 있습니다. 평활 스플라인은 명목상 $n$개의 모수가 있고 따라서 $n$개의 자유도가 있지만 이러한 $n$개의 매개변수가 크게 제약되기 때문에 앞서 말한 유효 자유도의 관점에서 고려됩니다. 이 때문에, 유연성의 척도로서 일반적인 자유도가 아닌 유효 자유도를 사용하게 됩니다. 유효자유도는 정수값을 가지지 않을 수도 있습니다. 
+
+유효자유도 $df_\lambda$는 다음과 같이 정의됩니다.
+
+$$
+df_\lambda=\sum_{i=1}^{N} \{S_\lambda\}_{ii}
+$$
+여기서 $S_\lambda$는 $F(F^TF+\lambda\Omega)^{-1}F^T$이며, $F$는 $(i,j)$성분이 $h_j(x_i,x_j)$인 $N\times N$ 행렬, $\Omega$는 $(i,j)$성분이 $\int_{a}^{b}h_i''(t)h_j''(t)dt$인 $N\times N$ 행렬입니다. 한편 이 행렬 $S_\lambda$는 특정 $\lambda$값에서의 평활 스플라인의 반응변수 $y$에 대한 추정치를 제공합니다.
+
+$$
+\hat{g}_\lambda=S_\lambda y
+$$
+최적의 $\lambda$를 찾기 위해 다음과 같은 한 데이터(leave-one-out) 교차검증법을 사용할 수 있습니다.
+
+$$
+RSS_{cv}(\lambda)=\sum_{i=1}^{N}(y_i-\hat{g}_\lambda^{(-i)}(x_i))^2=\sum_{i=1}^{N}\left[\frac{y_i-\hat{g}_\lambda(x_i)}{1-\{S\}_{ii}}\right]^2
+$$
+
+여기서 $\hat{g}_\lambda^{(-i)}$는 $i$번째 관측값을 제외하고 적합한 모형을 의미합니다. 
+
+
+## 국소 회귀(local regression)
+
+국소 회귀는 인근 훈련 관측치만 사용하여 목표점 $x_0$에서의 적합치를 계산하는 방법입니다. 국소 회귀 적합치가 계산되는 각각의 새로운 점에서는 새로운 가중치 집합에 대한 적절한 회귀 가중치 함수를 최소화하여 새로운 가중치 최소 제곱 회귀 모형을 적합시켜야 합니다.
+
+국소회귀를 위한 일반적인 알고리즘은 다음과 같습니다.
+
+1) 목표점 $x_0$과 가까운 $k$개의 훈련자료 $x_i$들을 찾습니다.
+
+2) 사전에 정의된 가중함수 $K(a,b)$를 이용하여 목표점 $x_0$를 중심으로 가중치  $K_{i0}=K(x_i,x_0)$를 계산합니다. 이러한 가중치는 $x_0$과 가까울 수록 큰 값을 가지며 앞서 선택한 $k$개의 가장 가까운 점을 제외한 나머지 값들은 0을 갖습니다.
+
+3) 반응변수 $y_i$와 예측변수 $x_i$의 적당한 변환값에 대한 가중 최소 제곱 회귀를 수행합니다. 선형 모형의 경우 적합식은 다음과 같습니다.
+
+$$
+\sum_{i=1}^{N} K_{i0}(y_i-\beta_0-\beta_1 x_i)^2
+$$
+
+4) $x_0$에서의 적합식은 다음과 같습니다.
+
+$$
+\hat{f}(x_0)=\hat{\beta}_0+\hat{\beta_1}x_0
+$$
+
+5) 모든 관측ㅊ를 목표 점으로 두고 위의 과정을 반복합니다.
+
+국소 회귀 분 석을 수행하기 위해 다음과 같은 사항들을 선택해야만 합니다.
+
++ 가중함수 $K$를 어떻게 정의해야 할 것인가?
+
++ 가중 최소 제곱의 계산을 위해 어떤 유형의 회귀 모형을 사용해야 할 것인가? 상수? 선형? 이차? 삼차?
+
++ 국소적으로 몇 개의 관측값 $k$을 이용하여 적합할 것인가?
+
+여기서 국소적으로 사용하는 관측값의 수 $k$는 평활 스플라인에서의 조율모수 $\lambda$와 유사한 역할을 합니다. $k$가 작을 수록 국소적으로 유연하지만 불안정한 적합을 하게 되며, 반대로 $k$값이 클 수록 더 많은 변수를 반영하여 평활하게 적합됩니다. 이 역시 교차검증법 등을 통해 적절한 $k$를 결정할 수 있습니다.
+
+## 일반화 가법 모형 (generalized additive model)
+
+일반화 가법 모형(generalized additive model; GAM)은 각 예측 변수의 비선형 함수를 허용하고 이를 더함을 통해 일반화 선형 모형(GLM)을 확장시킨 모형입니다. 
+
+다음과 같은 일반적인 다중 선형 회귀 모형을 생각해봅시다.
+
+$$
+y_i  = \beta_0 + \beta_1 x_{i1} +\beta_2 x_{i2} + \dots + \beta_p x_{ip} + \epsilon_i
+$$
+
+일반화 가법모형에서는 각 예측 변수와 반응사이의 비선형 관계를 허용하기 위해 각 선형 성분인 $\beta_j x_{ij}$를 매끌러운 비선형 함수인 $f_j(x_{ij})$로 대체합니다. 
+
+$$
+y_i  = \beta_0 + f_1(x_{i1}) +f_2(x_{i2}) + \dots +f_p(x_{ip}) + \epsilon_i=\beta_0+\sum_{j=1}^{p}f_j(x_{ij})+\epsilon_i
+$$
+
+이 모형은 각각의 $x_j$에 대해 별도의 $f_j$가 계산된 다음 합산되는 가법적(additive)인 형태를 가지고 있습니다. 이러한 가법적인 특성을 통해 다른 비모수적 모형보다 해석하기가 용이합니다. 여기서 가법모형의 구성요소가 되는 각 예측 변수에 대한 함수를 추정하기 위해 앞서 살펴본 다양한 방법을 사용할 수 있습니다.
+
+위의 식을 일반화 선형모형의 형태로 다음과 같이 생각할 수 있습니다.
+
+$$g(\mu) = \eta = \beta_0 + f_1(x_{i1}) +f_2(x_{i2}) + \dots +f_p(x_{ip})$$
+
+
+최소제곱법을 사용할 수 없는 상황에서는 백피팅(backfitting)기법을 활용할 수 있습니다. 백피팅 기법은 다른 예측 변수를 고정시킨 상태로 유지하면서 각 예측 변수에 대한 적합치를 반복적으로 업데이트하여 여러 모수가 포함된 모형을 적합시키는 방법입니다. 이 방법은 함수를 업데이트할 때마다 변수에 대한 적합 방법을 부분 잔차에 적용할 수 있다는 장점이 있습니다. 부분 잔차는 반응 변수에서 고정시킨 변수의 함수값을 뺀 나머지를 말합니다. 이 잔차는 업데이트할 변수의 비선형 회귀 분석에서 반응변수로 사용할 수 있습니다. 예를 들어, 다음과 같은 모형을 생각해 봅시다.
+
+$$
+y_i = f_1(x_{i1}) + f_2(x_{i2}) + f_3(x_{i3})
+$$
+그러면 $x_{i3}$에 대한 잔차는 다음과 같이 계산됩니다.
+
+$$
+r_i = y_i - f_1(x_{i1})-f_2(x_{i2})
+$$
+이렇게 $x_3$에 대한 비선형 회귀 분석에서 $f_3$을 적합시키기 위해 $r_i$를 사용할 수 있습니다.
+
+GAM은 다음과 같은 특징들을 가집니다
+
++ GAM을 사용하면 각 변수의 개별적인 비선형 함수를 동시에 적합시킬 수 있습니다. 
+
++ 가법 모형을 사용하면 다른 변수를 고정하면서 반응 변수에 대한 각 예측 변수를 개별적으로 고려할수 있기 때문에 추론을 더 용이하게 합니다. 변수 $x_ij$에 대한 각 함수 $f_j$의 복잡도는 자유도로 요약될 수 있습니다. 
+
++ 기본적으로 GAM은 각 변수간의 상호 작용을 반영하지 못하는 한계가 있습니다. 그러나 선형 회귀 분석에서와 마찬가지로 $x_j \times x_k$ 형태의 예측변수를 수동적으로 추가할 수 있습니다. 
+
+
+
+
+
+
+
+
+## 실습
+
+이번 실습에서는 `Wage` 자료를 통해 여러 비선형적인 적합 절차들을 학습하겠습니다.
+
+```{r chunk1}
+library(ISLR2)
+attach(Wage)
+```
+
+`lm()` 함수에서 `poly()` 함수를 이용하여 쉽게 다항회귀를 적합할 수 있습니다. 
+
+```{r chunk2}
+fit <- lm(wage ~ poly(age , 4), data = Wage)
+coef(summary(fit))
+```
+
+기본적으로 `poly()` 함수는 직교 다항식의 기저(basis)를 이용하여 적합시킵니다. 다시말해 예측 변수들의 행렬의 각 열이 `age`, `age^2`, `age^3` 및 `age^4`의 직교 조합임을 의미합니다. 우리가 친숙한 일반적인 다항식을 이용하여 적합하기 위해서는 `raw = TRUE`를 `poly()` 함수에 인수로서 추가하면 됩니다. `raw = TRUE` 일때의 회귀계수와 직교 다항식에서의 회귀계수는 서로 다르지만, 반응변수의 적합치는 동일합니다.
+
+```{r chunk3}
+fit2 <- lm(wage ~ poly(age , 4, raw = T), data = Wage)
+coef(summary(fit2))
+```
+위와 동일한 계산을 하기 위해 다음과 같은 방법들을 사용할 수도 있습니다.
+
+```{r chunk4}
+fit2a <- lm(wage ~ age + I(age^2) + I(age^3) + I(age^4),
+data = Wage)
+coef(summary(fit2a))
+
+fit2b <- lm(wage ~ cbind(age , age^2, age^3, age^4),
+data = Wage)
+coef(summary(fit2b))
+```
+이제 예측을 위해 필요한 `age`값의 격자(grid)를 만들고 `predict()`함수를 호출해봅시다.
+
+```{r chunk5, include = TRUE}
+agelims <- range(age)
+age.grid <- seq(from = agelims[1], to = agelims [2])
+preds <- predict(fit , newdata = list(age = age.grid), se = TRUE)
+se.bands <- cbind(preds$fit + 2 * preds$se.fit , preds$fit - 2 * preds$se.fit)
+
+par(mfrow = c(1, 2), mar = c(4.5 , 4.5, 1, 1),
+oma = c(0, 0, 4, 0))
+plot(age , wage , xlim = agelims , cex = .5, col = "darkgrey")
+title("Degree -4 Polynomial", outer = T)
+lines(age.grid, preds$fit , lwd = 2, col = "blue")
+matlines(age.grid , se.bands, lwd = 1, col = "blue", lty = 3)
+```
+
+여기서 `mar` 인수는 `c(아래, 왼쪽, 위, 오른쪽)` 형태로 그림의 마진을 지정해줍니다. 기본값은 `c(5, 4, 4, 2) + 0.1` 입니다. 
+`oma` 인수도 역시  `c(아래, 왼쪽, 위, 오른쪽)`  형태의 그림 바깥 영역의 마진을 지정해줍니다. 
+
+
+앞서서 직교 다항식을 이용한 다항 회귀와 일반적인 다항 회귀가 반응변수의 예측에는 영향을 주지 않는다고 얘기한 바 있습니다. 이를 확인해봅시다. 
+
+```{r chunk6}
+preds2 <- predict(fit2 , newdata = list(age = age.grid), se = TRUE)
+max(abs(preds$fit - preds2$fit))
+```
+다항 회귀 분석에서는 사용할 다항식의 차수(degree)를 결정해야 합니다. 이를 위한 한 가지 방법은 가설 검정을 사용하는 것입니다. 우리는 이제   `wage`와  `age` 사이의 관계를 충분히 설명하면서도 가장 간단한 모델을 결정하기 위해 선형에서 5차 다항식까지의 모형을 적합시키고 탐색해볼 것입니다. 보다 복잡한 모델 $M_2$가 필요하다는 대립 가설과 모델 $M_1$이 충분하다는 귀무 가설을 검정하기 위해 $F$-검정을 사용한 분산 분석(ANOVA; Analysis of Variance을 수행하는 `anova()` 함수를 사용합니다. `anova()` 함수를 사용하려면 $M_1$과 $M_2$가 중첩된 모형이어야 합니다. 즉,  $M_1$의 예측 변수는 $M_2$의 예측 변수의 하위 집합이어야 합니다. 여기서는 5개의 다른 모형을 적합시키고 더 단순한 모형을 더 복잡한 모형과 순차적으로 비교해 보겠습니다.
+
+```{r chunk7}
+fit.1 <- lm(wage ~ age , data = Wage)
+fit.2 <- lm(wage ~ poly(age , 2), data = Wage)
+fit.3 <- lm(wage ~ poly(age , 3), data = Wage)
+fit.4 <- lm(wage ~ poly(age , 4), data = Wage)
+fit.5 <- lm(wage ~ poly(age , 5), data = Wage)
+anova(fit.1, fit.2, fit.3, fit.4, fit.5)
+```
+
+선형모형 `Model 1`과 2차 모형 `Model 2` 를 비교하는 $p$-값은 거의 0($<2.2e-16$)이므로 선형 모형이 충분하지 않음을 나타냅니다. 마찬가지로 2차 모형 `Model 2`과 3차 모형 `Model 3`을 비교하는 $p$-값(=0.001679)도 유의하기 때문에 2차 모형도 충분하지 않습니다. 3차 모형 `Model 3`과 4차 모형 `Model 4` 에서의 $p$값은 약 0.05이며, 4차 모형 `Model 4`와 5차 모형 `Model 5`의 비교에서의 $p$-값은 약 0.37로 5차 모형까지는 필요하지 않습니다. 따라서 3차 혹은 4차 모형이 이 자료의 분석을 위해 적합하다고 할 수 있습니다. 여기서는 `anova()`함수를 이용하여 모형을 비교하였지만, 사실 `poly()`는 직교 다항식을 이용하기 때문에 이러한 모형 비교를 보다 손쉽게 수행할 수 있습니다. 
+
+```{r chunk8}
+coef(summary(fit.5))
+```
+이 결과를 보면 $p$-값이 동일하다는 것을 알 수 있습니다. $t$-통계량의 제곱이 $F$-통계량이기 때문에 이는 자명합니다. 하지만 우리가 직교 다항식을 이용하지 않았을 경우에는 `anova()`함수를 이용해야 합니다. 이번에는 `education` 변수들을 포함하고 있는 경우에 다항식의 차수가 어떻게 변하는 지 살펴봅시다.
+
+```{r chunk9}
+fit.1 <- lm(wage ~ education + age , data = Wage)
+fit.2 <- lm(wage ~ education + poly(age , 2), data = Wage)
+fit.3 <- lm(wage ~ education + poly(age , 3), data = Wage)
+anova(fit.1, fit.2, fit.3)
+```
+```{r chunk10}
+coef(summary(fit.3))
+```
+
+다음으로는 개인이 연간 25만 달러 이상 벌 수 있는지 예측하는 작업을 수행해보겠습니다. 이를 위해 먼저 적당한 반응변수를 만들어 주고, `glm()` 함수에서 `family = "binomial" `을 지정하여 다항 로지스틱 회귀 모형을 적합해보겠습니다. 
+
+```{r chunk11}
+fit <- glm(I(wage > 250) ~ poly(age , 4), data = Wage ,
+family = binomial)
+```
+
+여기서도 `I()` 함수를 이용하여  `wage > 250` 인 경우 1의 값을, 그렇지 않은 경우 0의 값을 모형에 적합하도록 하였습니다. `predict()`함수를 이용하여 예측을 수행해봅시다.
+
+```{r chunk12}
+preds <- predict(fit , newdata = list(age = age.grid), se = T)
+```
+
+`predict.glm()` 에서의 기본 값은 `type = "link"` 입니다. 즉, 로지스틱 회귀에서는 로짓 또는 로그 오즈 값 $X\hat{\beta}$에 대해 예측합니다. 
+$$
+\log\left(\frac{\text{Pr}(Y=1|X))}{1-\text{Pr}(Y=1|X)}\right)=X\beta
+$$
+표준오차 역시 $X\hat{\beta}$에 관한 값입니다. 확률 $\text{Pr}(Y=1|X)$에 관한 신뢰구간을 얻기 위해서는
+$$
+\text{Pr}(Y=1|X)=\frac{\exp(X\beta)}{1+\exp(X\beta)}
+$$
+를 계산하면 될 것입니다.
+
+```{r chunk13, include = TRUE}
+pfit <- exp(preds$fit) / (1 + exp(preds$fit))
+se.bands.logit <- cbind(preds$fit + 2 * preds$se.fit , preds$fit - 2 * preds$se.fit)
+se.bands <- exp(se.bands.logit) / (1 + exp(se.bands.logit))
+```
+
+사실 이러한 계산은 `type = "response"` 를 지정함을 통해 바로 계산할 수 있습니다.
+
+```{r chunk14}
+preds2 <- predict(fit , newdata = list(age = age.grid), type = "response", se = T)
+```
+
+이제 확률에 대한 예측선과 신뢰구간을 그려봅시다. 
+
+```{r chunk15}
+plot(age , I(wage > 250), xlim = agelims , type = "n", ylim = c(0, .2)) 
+points(jitter(age), I(( wage > 250) / 5), cex = .5, pch = "|", col = "darkgrey")
+lines(age.grid, pfit , lwd = 2, col = "blue")
+matlines(age.grid , se.bands , lwd = 1, col = "blue", lty = 3)
+```
+
+같은 나이에서의 값이 중첩되었을 경우 또한 살펴보기 위해 `jitter()`함수를 이용하여 값을 흔들어줬습니다. 
+
+단계 함수를 이용한 적합을 수행하기 위해 `cut()`함수를 사용하겠습니다.
+
+```{r chunk16}
+table(cut(age , 4))
+fit <- lm(wage ~ cut(age , 4), data = Wage)
+coef(summary(fit))
+```
+
+`cut()`함수에 4개의 구간으로 분할을 명령하니 자동적으로 분할점을 33.5, 49, 64.5로 골랐습니다. `cut()`함수의 인수로 `breaks`를 지정해줌을 통해 우리가 분할 점을 지정할 수도 있습니다.
+
+```{r chunk17}
+table(cut(age,breaks=c(17.9,30, 40, 50, 60, 80.1)))
+fit2 <- lm(wage ~ cut(age,breaks=c(17.9,30, 40, 50, 60, 80.1)), data = Wage)
+coef(summary(fit2))
+```
+
+`lm()`에 설명변수로 `cut()`를 지정하면 자동적으로 구간의 순서에 따른 더미(dummy) 변수를 생성하며 가장 작은 구간의 범주는 0으로 코딩됩니다. 즉, 절편값은 40세 미만의 평균 급여로 해석할 수 있습니다. 앞선 방법들에서와 마찬가지로 예측하고 그림을 그려볼 수 있습니다. 
+
+```{r chunk18, include = TRUE}
+agelims <- range(age)
+age.grid <- seq(from = agelims[1], to = agelims [2])
+preds <- predict(fit , newdata = list(age = age.grid), se = TRUE)
+se.bands <- cbind(preds$fit + 2 * preds$se.fit , preds$fit - 2 * preds$se.fit)
+
+plot(age , wage , xlim = agelims , cex = .5, col = "darkgrey", main ="Step function")
+lines(age.grid, preds$fit , lwd = 2, col = "red")
+matlines(age.grid , se.bands, lwd = 1, col = "blue", lty = 3)
+```
+
+이제 스플라인 회귀를 실습해봅시다. 먼저 `splines` 라이브러리를 불러옵니다. `bs()` 함수는 변수를 지정한 매듭에 대해서 스플라인 기저 함수를 이용한 설명변수 행렬을 만들어 줍니다. 기본값은 3차 스플라인이며, 절편은 제외됩니다. 즉, 매듭이 $k$개인 경우, `bs()`로 만든 설명변수 행렬의 열의 수는 `k+3`입니다. 
+
+```{r chunk19}
+library(splines)
+range(age)
+fit <- lm(wage ~ bs(age , knots = c(25, 40, 60)), data = Wage)
+pred <- predict(fit , newdata = list(age = age.grid), se = T)
+plot(age , wage , col = "gray")
+lines(age.grid, pred$fit , lwd = 2)
+lines(age.grid , pred$fit + 2 * pred$se, lty = "dashed")
+lines(age.grid , pred$fit - 2 * pred$se, lty = "dashed")
+```
+
+`age`변수에 매듭으로 25, 40, 60을 지정하였기 때문에 6개의 기저함수를 얻을 수 있습니다.  `df` 옵션을 지정함을 통해서 6개의 스플라인 기저함수를 만들 수도 있습니다. 이 경우 매듭은 자료를 균등하게 분할한 지점으로 생성됩니다. 
+```{r chunk20}
+dim(bs(age , knots = c(25, 40, 60)))
+dim(bs(age , df = 6))
+attr(bs(age , df = 6), "knots")
+```
+
+`df=6`을 지정한 경우, 매듭은 3개가 생기게 되며, 균등분할 지점은 각각 25, 50, 75 백분위수로 생성됩니다. `age` 변수에서 해당 백분위수에 해당하는 값은 각각 33.8, 42.0, 51.0입니다. 3차 이상의 스플라인 기저함수를 생성하기 위해서는 `degree` 옵션을 수행할 수도 있습니다. 
+
+자연 스플라인을 이용하려면 `ns()`함수를 이용할 수 있습니다. `R`에서는 자연 스플라인을 위해 매듭 수+1개의 자유도를 사용합니다(절편 제외). 이는 지정한 매듭 이외에 $x$의 최솟값 과 최댓값을 경계매듭으로 사용하기 때문입니다. 따라서 3개의 매듭을 사용한 자연스플라인 모형의 모수는 총 5개가 됩니다. 
+
+```{r chunk21}
+fit2 <- lm(wage ~ ns(age, df = 4), data = Wage)
+pred2 <- predict(fit2, newdata = list(age = age.grid),
+     se = T)
+plot(age , wage , col = "gray")
+lines(age.grid, pred2$fit, col = "red", lwd = 2)
+```
+
+평활 스플라인을 위해서는 `smooth.spline` 함수를 이용합니다. 
+
+```{r chunk22}
+plot(age, wage, xlim = agelims, cex = .5, col = "darkgrey")
+title("Smoothing Spline")
+fit <- smooth.spline(age, wage, df = 16)
+fit2 <- smooth.spline(age, wage, cv = TRUE)
+fit2$df
+lines(fit, col = "red", lwd = 2)
+lines(fit2, col = "blue", lwd = 2)
+legend("topright", legend = c("16 DF", "6.8 DF"),
+    col = c("red", "blue"), lty = 1, lwd = 2, cex = .8)
+```
+
+빨간 선은 `df=16`을 지정했을 때의 평활 스플라인입니다. `cv=TRUE`옵션을 주면 교차타당법으로 구한 최적의 자유도값에서의 평활 스플라인을 구해줍니다. 여기서는 6.8의 자유도를 갖게 하는 $\lambda$값이 최적으로 나타났습니다. 
+
+
+국소 회귀는 `loess`함수로 그릴 수 있습니다. 
+
+
+```{r chunk23}
+plot(age, wage, xlim = agelims, cex = .5, col = "darkgrey")
+title("Local Regression")
+fit <- loess(wage ~ age, span = .2, data = Wage)
+fit2 <- loess(wage ~ age, span = .5, data = Wage)
+lines(age.grid, predict(fit, data.frame(age = age.grid)),
+    col = "red", lwd = 2)
+lines(age.grid, predict(fit2, data.frame(age = age.grid)),
+    col = "blue", lwd = 2)
+legend("topright", legend = c("Span = 0.2", "Span = 0.5"),
+    col = c("red", "blue"), lty = 1, lwd = 2, cex = .8)
+```
+
+여기서는 `span=0.2`와 `span=0.5`를 사용한 ``국소회귀를 수행했습니다. 즉, 각 점은 전체 자료의 20\%, 50\%에 해당하는 이웃 점들만 모형에 반영하게 됩니다. 
+`span`값이 클 수록 보다 평활한 곡선을 적합시키게 됩니다. 
+
+이제 `wage`를 예측하기 위해 `year`와 `age`에 자연 스플라인을 적용하고 `education` 변수를 양적 설명변수로 하는 GAM 모형을 적합해봅시다. `year`와 `age`에 자연 스플라인의 자유도는 각각 4와 5를 적용해주었습니다. 
+
+
+```{r chunk24}
+gam1 <- lm(wage ~ ns(year, 4) + ns(age, 5) + education,
+    data = Wage)
+```
+
+이번에는 `year`와 `age`에 평활 스플라인을 적용해봅시다. 평활 스플라인에 사용되는 함수 `s()`를 이용하기 위해 `gam` 라이브러리를 불러옵니다. 여기서는 `year`에는 자유도가 4인 평활 스플라인을, `age`에는 5의 자유도를 갖게 하였습니다. `education`은 양적 변수이므로 그대로 공식에 반영하였고, `R`에서는 자동적으로 4개의 더미변수로 변환합니다. 
+
+```{r chunk25}
+library(gam)
+gam.m3 <- gam(wage ~ s(year, 4) + s(age, 5) + education,
+    data = Wage)
+```
+
+```{r chunk26}
+par(mfrow = c(1, 3))
+plot(gam.m3, se = TRUE, col = "blue")
+```
+`plot()`함수는 `gam.m3`의 클래스 `Gam`을 인식하여 `plot.Gam()`함수를 통해 각 예측변수를 통해 반응변수를 예측한 그림을 그려줍니다. 앞에서 적합한 `gam1`은 `Gam` 클래스가 아닌 `lm` 클래스이지만, `plot.Gam()`함수는 이 경우데도 이와 유사한 그림을 그려줍니다. 여기서 `plot()`함수를 이용하면 `lm` 클래스에 대응되는 잔차 그림 등을 그려준다는 것을 명심하세요. 
+
+
+```{r chunk27}
+plot.Gam(gam1, se = TRUE, col = "red")
+```
+
+자연스플라인과 평활스플라인 그림 모두에서  `year`변수의 효과는 다소 선형적으로 보입니다. 우리는 여러 단계의 분산분석을 통해 최적의 모형을 선택할 수 있습니다. `gam.m1`은 `year`변수가 없는 모형, `gam.m2`는 `year`변수를 선형적으로 대입한 모형입니다. 앞에서 `gam.m3`은 `year`변수에 자유도가 4인 평활스플라인 이었습니다. 
+
+
+```{r chunk28}
+gam.m1 <- gam(wage ~ s(age, 5) + education, data = Wage)
+gam.m2 <- gam(wage ~ year + s(age, 5) + education,
+    data = Wage)
+anova(gam.m1, gam.m2, gam.m3, test = "F")
+```
+
+우선 모형 1과 모형 2를 비교한 결과 모형 2의 $p$-값이 0.0014로 `year`에 선형효과를 포함한 모형이 더 좋은 모형임을 확인할 수 있습니다. 그렇지만 모형 2와 모형 3의 비교에서는 모형 3의 $p$-값이 0.3485로 `year`에 평활 스플라인을 적용한 모형이 `year`에 선형 효과만을 허용한 모형보다 더 낫다는 증거가 없습니다. 따라서 우리는 모형 2가 세 모형 중 가장 선호되는 모형이라고 말할 수 있습니다. 
+
+`summary()` 함수는 gam 적합결과를 요약해줍니다. 
+
+```{r chunk29}
+summary(gam.m3)
+```
+
+모수 효과에 대한 분산분석(선형 효과가 없다는 귀무가설에 대한) 결과 `year`, `age`, 그리고 `education` 변수들은 통계적으로 매우 유의한 영향을 미치는 것으로 나타났습니다. 이와 대조적으로 비모수적 효과에 대한 분산분석(선형 효과만 있다는 귀무가설에 대한) 결과에서는 `year` 변수의 $p$-값이 높게 나타났고, `year`변수는 선형 효과를 반영하는 게 바람직하다는 결론을 다시 확인할 수 있습니다. `age`변수에 대해서는 비선형 효과가 유의하게 나타났습니다. 
+
+`predict()`함수를 이용해서 예측값을 구할 수 있습니다.
+
+```{r chunk30}
+preds <- predict(gam.m2, newdata = Wage)
+```
+
+이번에는 `age`변수에 국소회귀 방법을 적용해보겠습니다. 여기서는 `span=0.7`옵션을 사용해봤습니다. 
+
+```{r chunk31}
+gam.lo <- gam(
+    wage ~ s(year, df = 4) + lo(age, span = 0.7) + education,
+    data = Wage
+  )
+plot(gam.lo, se = TRUE, col = "green")
+```
+
+`lo()`함수에 교차항을 다음과 같이 반영시킬 수도 있습니다. 
+
+```{r chunk32}
+gam.lo.i <- gam(wage ~ lo(year, age, span = 0.5) + education,
+    data = Wage)
+```
+
+이번에는 `wage>250`을 반응변수로 한 로지스틱 회귀에 GAM을 적합해봅시다. 로지스틱 회귀의 적합을 위해 `family = binomial`을 설정해줍니다. 
+
+```{r chunk33}
+gam.lr <- gam(
+    I(wage > 250) ~ year + s(age, df = 5) + education,
+    family = binomial, data = Wage
+  )
+par(mfrow = c(1, 3))
+plot(gam.lr, se = T, col = "green")
+```
+위의 그림에서 `<HS` 범주의 부분효과의 신뢰구간이 매우 크게 나타났습니다. 실제로 `<HS` 범주에 해당할 때 `wage>250`인 경우가 없었기 때문입니다. 
+
+```{r chunk34}
+table(education, I(wage > 250))
+```
+따라서 이 범주에 해당하는 자료를 제외하고 다시 적합해보겠습니다. 그 결과 교육수준에 대한 부분효과를 보다 더 잘 살펴볼 수 있습니다. 
+
+
+```{r chunk35}
+gam.lr.s <- gam(
+    I(wage > 250) ~ year + s(age, df = 5) + education,
+    family = binomial, data = Wage,
+    subset = (education != "1. < HS Grad")
+  )
+plot(gam.lr.s, se = T, col = "green")
+```

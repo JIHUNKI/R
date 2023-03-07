@@ -1,0 +1,172 @@
+---
+title: "2022-1 통계학 특강 기말시험"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+위스콘신 유방암 자료를 다음과 같이 불러옵시다. 
+
+```{r}
+library(RCurl)
+UCI_data_URL <- getURL('https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data')
+names <- c('id_number', 'diagnosis', 'radius_mean', 
+           'texture_mean', 'perimeter_mean', 'area_mean', 
+           'smoothness_mean', 'compactness_mean', 
+           'concavity_mean','concave_points_mean', 
+           'symmetry_mean', 'fractal_dimension_mean',
+           'radius_se', 'texture_se', 'perimeter_se', 
+           'area_se', 'smoothness_se', 'compactness_se', 
+           'concavity_se', 'concave_points_se', 
+           'symmetry_se', 'fractal_dimension_se', 
+           'radius_worst', 'texture_worst', 
+           'perimeter_worst', 'area_worst', 
+           'smoothness_worst', 'compactness_worst', 
+           'concavity_worst', 'concave_points_worst', 
+           'symmetry_worst', 'fractal_dimension_worst')
+BCW <- read.table(textConnection(UCI_data_URL), sep = ',', col.names = names)
+BCW$id_number <- NULL
+temp<-apply(BCW[-1],2,as.numeric)
+diagnosis<-factor(BCW$diagnosis)
+BCW<-data.frame(diagnosis,temp)
+```
+
+ `BCW`데이터의 구조를 살펴보기 위해 처음 6행을 출력해볼게요. 그리고 `BCW`데이터의 차원과 `BCW`데이터에 있는 변수들의 이름을 살펴봅시다.
+
+```{r}
+head(BCW , 6)
+dim(BCW)
+names(BCW)
+```
+
+
+`BCW`을 훈련자료 `BCW.train`과 시험자료 `BCW.test`로 나눠봅시다. seed는 200으로 하고, 훈련자료는 400개, 시험자료는 169개를 랜덤으로 추출하여 각각 `BCW.train`과 `BCW.test`에 저장하세요. 앞으로의 분석을 용이하게 하기위해 설명변수들에 대해 표준화도 해줍시다. 예를들어 `BCW.train`을 표준화시키려면 `BCW.train[,-1]<-scale(BCW.train[,-1])`과 같이 수행하면 됩니다. 
+
+```{r}
+set.seed(200)
+train_ind <-sample(1:nrow(BCW),size=400) 
+BCW.train<-BCW[train_ind,]
+BCW.test<-BCW[-train_ind,]
+BCW.train[,-1]<-scale(BCW.train[,-1])
+BCW.test[,-1]<-scale(BCW.test[,-1])
+```
+
+`tree` 패키지 안에 있는 `tree()`함수를 이용하여 분류 나무를 적합해보세요.
+분류 나무의 이름은 `tree.BCW`로 하고, 시험자료 `BCW.test`의 분류 결과는 `tree.pred`로 합니다.
+`BCW.test`에서의 오분류율은 얼마인가요?
+
+```{r}
+library(tree)
+tree.BCW<-tree(diagnosis~.,data=BCW.train)
+tree.pred <- predict(tree.BCW,BCW.test,type="class")
+table(BCW.test$diagnosis,tree.pred)
+1-((99+46)/169)
+```
+
+`cv.tree()`함수를 이용하여 가지치기를 하고 결과를 cv.BCW에 저장합시다. 이때 시드는 11번을 이용하겠습니다. 
+오분류율을 최소로 하는 종착 노드의 수는 몇 개인가요?
+이때의 나무를 `prune.BCW`에 저장하고, 이 나무로 `BCW.test`를 분류한 결과를 `prune.pred`로 저장합니다.
+이 나무의 `BCW.test`에서의 오분류율은 얼마인가요?
+
+```{r}
+set.seed(11)
+cv.BCW <-cv.tree(tree.BCW, FUN = prune.misclass)
+prune.BCW <- prune.misclass(tree.BCW, best = 4)
+prune.pred <-predict(prune.BCW,BCW.test,type="class")
+table(BCW.test$diagnosis,prune.pred)
+1-((101+54)/169)
+```
+
+이번에는 `randomForest` 패키지의 `randomForest()` 함수를 이용하여 배깅과 랜덤포레스트 방법을 이용한 분류기를 만들어 봅시다. 배깅분류기의 시드 번호는 3으로 하고, 랜덤포레스트의 시드번호는 4를 이용합니다. 배깅 분류기는 100개의 나무를 사용합니다. 배깅 분류기의 이름은 `bag.BCW`로, 시험자료의 분류결과는 `bag.pred`로 저장하세요.  
+랜덤포레스트 분류기는 5개의 변수를 사용하고 1000개의 나무를 이용합니다. 랜덤포레스트 분류기의 이름은 `rf.BCW`, 시험자료의 분류결과는 `rf.pred`로 저장하세요.
+
+배깅 분류기와 랜덤포레스트 분류기의 시험자료에서의 오분류율은 각각 얼마입니까?
+
+```{r}
+library(randomForest) 
+set.seed(3)
+bag.BCW <-randomForest(diagnosis~.,data=BCW,subset=train_ind,ntree=100)
+bag.pred <- predict(bag.BCW,newdata=BCW.test,type="class")
+table(BCW.test$diagnosis,bag.pred)
+1-((103+2)/169)
+```
+
+```{r}
+library(randomForest)
+set.seed(4)
+rf.BCW <-randomForest(diagnosis~.,data=BCW.train,mtry=5,ntree=1000) 
+rf.pred <-predict(rf.BCW,newdata=BCW.test,type="class")
+table(BCW.test$diagnosis,rf.pred)
+1-((101+60)/169)
+```
+
+`gbm` 패키지의 `gbm()` 함수를 이용하여 부스팅 분류기를 만들어 봅시다.
+먼저 데이터를 다음과 같이 살짝 조절해주겠습니다. 부스팅 모형을 만들기 위해서 `BCW.train2` 데이터를 이용하고, 시험자료의 분류를 위해서는 `BCW.test2` 데이터를 이용하세요.
+
+```{r}
+BCW.train2<-BCW.train
+BCW.train2$diagnosis<-as.numeric(BCW.train$diagnosis)-1
+BCW.test2<-BCW.test
+BCW.test2$diagnosis<-as.numeric(BCW.test$diagnosis)-1
+```
+
+부스팅분류기의 시드 번호는 5으로 하고, 5000개의 나무를 사용하며, 나무의 깊이는 1로, $\lambda=0.001$로 합니다.  부스팅 분류기의 이름은 `boo.BCW`로, 시험자료의 분류결과는 `boo.pred`로 저장하세요. 
+분류 문제이기 때문에 `distribution = "bernoulli"`로 지정해야 합니다! `boo.pred`의 값을 확인하고, 분류를 어떻게 해야 할지 생각해보세요. 부스팅 분류기의 시험자료에서의 오분류율은 얼마입니까?
+
+```{r}
+library(gbm)
+set.seed(5)
+boo.BCW <- gbm(diagnosis ~ ., data = BCW.train2,
+    distribution = "bernoulli", n.trees = 5000,
+    interaction.depth = 1, shrinkage = 0.001, verbose = F)
+boo.pred <- predict(boo.BCW,newdata=BCW.test2,type="response")
+boo.pred
+boo.pred<-ifelse(boo.pred>0.5,1,0)
+table(BCW.test2$diagnosis,boo.pred)
+1-((101+58)/169)
+```
+
+`kernlab` 패키지의 `ksvm()`함수를 이용하여 SVM 분류기를 만들어 봅시다. 커널은 `"rbfdot"` 을 이용하고, `sigma =0.01`, `C=100`을 지정해주세요. SVM 분류기의 이름은 `svm.BCW`로, 시험자료의 분류결과는 `svm.pred`로 저장하세요. SVM 분류기의 시험자료에서의 오분류율은 얼마입니까?
+
+```{r}
+library(kernlab)
+svm.BCW <-  ksvm(diagnosis~.,data=BCW.train2,kernel="rbfdot",
+               kpar=list(sigma=0.01),C=100,cross=10)
+svm.BCW
+svm.pred <- predict(svm.BCW,BCW.test2,type="response")
+svm.pred
+svm.pred<-ifelse(svm.pred>0,1,0)
+table(BCW.test2$diagnosis,svm.pred)
+1-((65+38)/169)
+```
+
+시험자료에서의 오분류율이 가장 낮은 분류기는 무엇입니까?  랜덤포레스트 모형이 "0.04733728"로 가장 낮은 오분류의 분류기 모형입니다.
+
+(Optional) 여기까지 시간이 남았다면 위에서 다룬 분류기의 parameter들을 조정해가며 위의 실험에서보다 시험자료에서의 오분류율이 더 낮은 분류기를 만들어보세요!
+
+```{r}
+library(glmnet)
+## Adaptive Lasso
+BCW[,-1]<-scale(BCW[,-1])
+x <- model.matrix(diagnosis ~ ., BCW)[, -1]
+y <- BCW$diagnosis
+set.seed(200)
+train <- sample (1: nrow(x), 400)
+test <- (-train)
+y.test <- y[test]
+grid<-10^seq(10,-2,lenght=100)
+coef_lse<- lm(y~x, data=BCW[train,])
+w3 <- 1/abs(coef(coef_lse)[-1])
+w3
+alasso.mod <- glmnet(x, y, alpha = 1, lambda = grid, penalty.factor=w3)
+cv.alasso <- cv.glmnet(x[train,], y[train], family='bernoulli',
+                       alpha=1, standardize=TRUE, type.measure='mse', penalty.factor=w3)
+lam.alasso <- cv.alasso$lambda.min
+coef(cv.lasso, s=cv.alasso$lambda.min)
+lasso.pred <- predict(lasso.mod, s = lam.lasso,
+    newx = x[test, ])
+
+
+```
+
+

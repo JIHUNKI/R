@@ -1,0 +1,342 @@
+---
+title: "통계학특강"
+author: "강종경"
+header-includes: \usepackage{setspace}\doublespacing
+output:
+  pdf_document:
+    latex_engine: xelatex
+    extra_dependencies: ["kotex","amsmath"]
+    keep_tex: yes
+  word_document: default
+  html_document:
+    df_print: paged
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.11.2
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+mainfont: NanumGothic
+editor_options:
+  markdown:
+    wrap: sentence
+fontsize: 12pt
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# 나무 기반 모형 실습
+## 분류 나무 적합하기
+
+
+분류 회귀 나무(classification and regression tree :CART)를 적합시키기 위해 `tree`패키지를 이용합니다.
+
+```{r chunk1}
+library(tree)
+```
+
+먼저 분류 트리를 사용하여 `Carseats` 데이터 세트를 분석해보겠습니다. 이 데이터에서 `Sales`는 연속형 변수이므로 이진 변수로 변경하겠습니다. `ifelse()` 함수를 사용하여 `Sales` 변수가 $8$를 초과하면 `Yes` 값을 취하고 그렇지 않으면 `No` 값을 갖는 `High`라는 변수를 만들어 봅시다. 
+
+```{r chunk2}
+library(ISLR2)
+attach(Carseats)
+High <- factor(ifelse(Sales <= 8, "No", "Yes"))
+```
+
+`data.frame()`함수를 이용하여 `Carseats` 데이터와 `High`변수를 합치겠습니다.
+
+
+```{r chunk3}
+Carseats <- data.frame(Carseats, High)
+```
+
+우리는 이제 `Sales`를 제외한 모든 변수를 사용하여 반응 변수 `High`를 예측하기 위해 `tree()` 함수를 사용하여 분류 나무를 적합시킵니다. 
+`tree()` 함수의 구문은 `lm()` 함수의 구문과 매우 유사합니다. 
+
+```{r chunk4}
+tree.carseats <- tree(High ~ . - Sales, Carseats)
+```
+
+`summary()` 함수는 나무에서 내부 노드(node)로 사용되는 변수, 종착 노드 수,  (훈련) 오류율을 나열합니다.
+
+
+```{r chunk5}
+summary(tree.carseats)
+```
+
+훈련 오류율은 9\%로 나타났습니다. 분류나무에서는 이탈도(deviance)
+
+$$
+-2 \sum_m \sum_k n_{mk} \log \hat{p}_{mk},
+$$
+
+를 출력해줍니다. 여기서 $n_{mk}$s는 $k$번째 클래스에 속하는 $m$번째 종착 노드에서의 관측치의 수를 뜻합니다. 이 값은 앞서 다룬 엔트로피와도 연관이 있습니다.
+
+$$
+D = -\sum_{k=1}^K \hat{p}_{mk}\log_2 \hat{p}_{mk}
+$$
+
+이탈도가 작으면 (훈련) 데이터에 나무가 잘 적합되었음을 의미합니다. *잔차 평균 이탈도(Residual mean deviance)*는 단순히 이탈도를 $n-|T|_0=400-27=373$로 나눈 값입니다.
+
+
+나무의 가장 매력적인 특성 중 하나는 그래픽으로 표시할 수 있다는 것입니다. `plot()` 함수를 사용하여 나무 구조를 표시하고 `text()` 함수를 사용하여 노드 레이블을 표시합시다. 인수 `pretty = 0`은 단순히 각 범주에 대한 문자를 표시하는 것이 아니라 모든 질적 예측 변수에 대한 범주 이름을 포함하도록 지시하는 역할을 합니다.
+
+```{r chunk6}
+plot(tree.carseats)
+text(tree.carseats, pretty = 0)
+```
+
+
+매출액에서 가장 중요한 지표는 첫번째 가지인 선반위치입니다. 선반위치가 좋은 곳이 보통인 곳이나 나쁜 곳보다 판매량이 높았습니다.
+
+단순히 트리 객체인 `tree.carseats`를 입력하면 트리의 각 가지에 해당하는 결과를 출력해줍니다.  분할 기준(예: `Price < 92.5`), 해당 가지의 관측치 수, 이탈도, 분기의 전체 예측('예' 또는 '아니오') 및 '예'와 '아니오' 값을 갖는 해당 가지의 관측치 비율을 표시합니다. 종착 노드로 연결되는 가지는 별표로 표시됩니다.
+
+```{r chunk7}
+tree.carseats
+```
+
+
+이러한 데이터에 대한 분류 나무의 성능을 제대로 평가하기 위해서는 단순히 훈련 오류를 계산하는 것이 아니라 시험 오류를 추정해야 합니다. 관측치를 훈련 자료셋와 시험 자료셋으로 나누고, 훈련 자료 셋을 사용하여 트리를 구축하고, 시험 데이터셋에 대한 성능을 평가합니다. `predict()` 함수를 사용할 수 있습니다. 분류 트리의 경우 인수 `type = "class"`는 `R`이 실제 클래스 예측을 반환하도록 지시합니다. `set.seed(2)`로 부터 추출한 200개의 관측치를 이용하여 나무를 생성하였을 때,  이 나무의 시험 데이터셋에 대한 정분류율은 약 $77\,\%$입니다. 
+
+
+```{r chunk8}
+set.seed(2)
+train <- sample(1:nrow(Carseats), 200)
+Carseats.test <- Carseats[-train, ]
+High.test <- High[-train]
+tree.carseats <- tree(High ~ . - Sales, Carseats,
+    subset = train)
+tree.pred <- predict(tree.carseats, Carseats.test,
+    type = "class")
+table(tree.pred, High.test)
+(104 + 50) / 200
+```
+
+다음으로, 나무를 가지치기(pruning)하는 것이 개선된 결과로 이어질 수 있는지 여부를 살펴보겠습니다.
+`cv.tree()` 함수는 최적의 나무 복잡도 수준을 결정하기 위해 교차 검증을 수행하며, 비용 복잡성 가지제거(cost complexity pruning) 방법이 이용됩니다.
+
+$$
+\sum_{m=1}^{|T|}\sum_{i:X_i \in R_m}(y_i-\hat{y}_{R_m})^2 +\alpha|T|
+$$
+
+`cv.tree()`함수에서는 교차 검증 및 가지치기 프로세스에서 이탈도를 기본값으로 이용합니다. 이탈도가 아닌 분류 오류율을 이용하기 위해 `FUN = prune.misclass` 인수를 입력하였습니다. `cv.tree()` 함수는 각 나무의 종착 노드 수('size')뿐만 아니라 해당 오류율과 사용된 비용 복잡성 매개 변수 값(`k`$=\alpha$)을 보고합니다.  
+
+```{r chunk9}
+set.seed(7)
+cv.carseats <- cv.tree(tree.carseats, FUN = prune.misclass)
+names(cv.carseats)
+cv.carseats
+```
+
+ 우리는 `prune.misclass`를 이용했지만,  교차 검증에 의해 오분류된 관측치의 갯수는 `dev`라는 이름으로 나타납니다.  9개의 종착노드를 가진 나무가 74개의 교차 검증 오분류를 보였으며, 이 나무를 선택하는 것이 타당합니다. `size`와 `k`값에 따라 `dev`가 어떻게 달라지는지 그려봅시다. 
+
+```{r chunk10}
+par(mfrow = c(1, 2))
+plot(cv.carseats$size, cv.carseats$dev, type = "b")
+plot(cv.carseats$k, cv.carseats$dev, type = "b")
+```
+
+`prune.misclass()` 함수를 이용하여 아홉 개의 종착 노드를 가진 나무만을 남기고 가지치기합시다. 
+
+```{r chunk11}
+prune.carseats <- prune.misclass(tree.carseats, best = 9)
+plot(prune.carseats)
+text(prune.carseats, pretty = 0)
+```
+
+
+이 가지치기된 나무는 시험 데이터셋에서도 잘 수행될 까요? 시험 데이터셋에 다시 한번 `predict()` 함수를 적용해봅시다. 
+
+```{r chunk12}
+tree.pred <- predict(prune.carseats, Carseats.test,
+    type = "class")
+table(tree.pred, High.test)
+(97 + 58) / 200
+```
+
+이제 정분류율이 77.5\%로 가지치기하지 않은 나무의 정분류율 77\%보다 약간 상승했습니다. 가지치기를 통해 보다 해석 가능한 트리를 생성했을 뿐만 아니라 분류 정확도도 약간 향상되었음을 알 수 있습니다. 
+
+더 복잡한 나무를 선택한 경우 오히려 분류 정확도가 떨어지는 것을 보여줍니다.
+
+```{r chunk13}
+prune.carseats <- prune.misclass(tree.carseats, best = 14)
+plot(prune.carseats)
+text(prune.carseats, pretty = 0)
+tree.pred <- predict(prune.carseats, Carseats.test,
+    type = "class")
+table(tree.pred, High.test)
+(102 + 52) / 200
+```
+
+
+## 회귀나무 적합하기. 
+
+여기서는 회귀 나무를 `Boston` 데이터에 적합시켜보겠습니다. 먼저, 훈련 자료셋과 시험 자료셋으로 자료를 나누고, 훈련자료를 이용하여 나무를 생성해보겠습니다. 
+
+```{r chunk14}
+set.seed(1)
+train <- sample(1:nrow(Boston), nrow(Boston) / 2)
+tree.boston <- tree(medv ~ ., Boston, subset = train)
+summary(tree.boston)
+```
+
+`summary()` 함수의 출력 결과, 나무를 생성하는 데 사용된 변수가 4개뿐임을 알 수 있습니다. 회귀 나무의 맥락에서 이탈도는 단순히 나무에 대한 오차 제곱합입니다. 나무를 한 번 그려봅시다. 
+
+```{r chunk15}
+plot(tree.boston)
+text(tree.boston, pretty = 0)
+```
+
+
+변수 `lstat` 은 낮은 사회경제적 지위를 가진 개인의 비율을 측정하며,  변수 `rm`은 방의 갯수의 평균입니다. 이 트리는 `rm` 값이 클수록, `lstat` 값이 낮을수록 비싼 집에 해당한다는 것을 보여줍니다. 예를 들어, 이 트리는 `rm > = 7.553`인 인구 조사 지역의 주택에 대한 집값의 중위수를 $45,380$로 예측한다.
+
+좀 더 복잡한 나무를 적합시키려면 `control = tree.control(nobs = length(train), mindev = 0)` 인수를  `tree()` 함수에 추가하면 됩니다. 
+
+```{r chunk_t1}
+tree.boston_t1 <- tree(medv ~ ., Boston, subset = train,control = tree.control(nobs = length(train), mindev = 0))
+plot(tree.boston_t1)
+```
+
+분류나무에서와 마찬가지로, 회귀나무에서도 가지치기를 시도해 보겠습니다. 
+
+```{r chunk16}
+cv.boston <- cv.tree(tree.boston)
+plot(cv.boston$size, cv.boston$dev, type = "b")
+```
+
+교차 검증 결과 가장 복잡한 나무가 선택되었습니다. 나무를 제거하려면 `prune.tree()` 함수를 사용하여 다음과 같이 할 수 있습니다.
+
+
+```{r chunk17}
+prune.boston <- prune.tree(tree.boston, best = 5)
+plot(prune.boston)
+text(prune.boston, pretty = 0)
+```
+
+교차 검증 결과에 따라, 우리는 제거되지 않은 나무를 사용하여 시험 데이터셋에 대한 예측을 하겠습니다.
+
+```{r chunk18}
+yhat <- predict(tree.boston, newdata = Boston[-train, ])
+boston.test <- Boston[-train, "medv"]
+plot(yhat, boston.test)
+abline(0, 1)
+mean((yhat - boston.test)^2)
+```
+
+생성된 회귀 나무의 시험 데이터셋 MSE는 $35.29$입니다.  MSE의 제곱근은 약 $5.941$이며, 이는 이 나무 모형이 인구 조사 지역의 실제 중위수 집값과는 평균적으로 약 $5{.}941$ 정도 차이가 나는 예측으로 이어진다는 것을 나타냅니다. 
+
+
+
+## 배깅과 랜덤 포레스트
+
+여기서는 `randomForest` 패키지를 사용하여 `Boston` 데이터에 배깅 및 랜덤 포레스트를 적용해 보겠습니다. 
+배깅은 단순히 $m=p$인 랜덤 포레스트의 특별한 경우입니다. 따라서 `randomForest()` 함수를 사용하여 랜덤 포레스트와 배깅을 모두 수행할 수 있습니다. 다음과 같이 배깅을 수행합니다.
+
+```{r chunk19}
+library(randomForest)
+set.seed(1)
+bag.boston <- randomForest(medv ~ ., data = Boston,
+    subset = train, mtry = 12, importance = TRUE)
+bag.boston
+```
+
+인수 `mtry = 12`는 트리의 각 분할에 대해 모든 $12$개의 예측 변수를 고려해야 한다는 것을 나타냅니다. 즉, 배깅을 수행하는 것입니다. 이제 시험 데이터셋에 모형을 적용해보겠습니다. 
+
+```{r chunk20}
+yhat.bag <- predict(bag.boston, newdata = Boston[-train, ])
+plot(yhat.bag, boston.test)
+abline(0, 1)
+mean((yhat.bag - boston.test)^2)
+```
+배깅 회귀 나무와 관련된 시험 데이터셋의 MSE는 $23.42$로, 단일 나무를 사용하여 얻은 시험 데이터셋의 MSE의 약 3분의 2입니다. `ntree` 인수를 이용하여 배깅에 사용되는 나무의 수를 변경할 수 있습니다. 
+
+```{r chunk21}
+bag.boston <- randomForest(medv ~ ., data = Boston,
+    subset = train, mtry = 12, ntree = 100)
+yhat.bag <- predict(bag.boston, newdata = Boston[-train, ])
+mean((yhat.bag - boston.test)^2)
+```
+
+랜덤 포레스트는 'mtry' 인수를 더 작은 값을 사용한다는 점을 제외하면 배깅과 정확히 같은 방식으로 진행됩니다. 기본적으로 `random'Forest()`는 회귀 나무로 랜덤 포레스트를 만들 때 $p/3$개의 변수를 사용하고 분류 나무로의 랜덤 포레스트를 만들 때 $\sqrt{p}$ 변수를 사용한다. 여기서는 mtry = 6을 사용해보겠습니다.
+
+
+```{r chunk22}
+set.seed(1)
+rf.boston <- randomForest(medv ~ ., data = Boston,
+    subset = train, mtry = 6, importance = TRUE)
+yhat.rf <- predict(rf.boston, newdata = Boston[-train, ])
+mean((yhat.rf - boston.test)^2)
+```
+
+시험 데이터셋의 MSE는 $20.07$로 이 데이터에는 배깅보다 더 성능이 향상된 결과를 제공해주었습니다. 
+
+`importance()` 함수를 이용하여 각 변수의 중요도를 살펴볼 수 있습니다. 
+
+```{r chunk23}
+importance(rf.boston)
+```
+
+변수들의 중요도에 대한 두 가지 척도가 보고됩니다. 첫 번째는 주어진 변수가 빠졌을 때 가방 밖 샘플에 대한 예측의 평균 정확도 감소에 기초한 값입니다. 두 번째는 해당 변수에 대한 분할로 인해 발생하는 노드 불순도의 총 감소에 대한 측정값으로, 모든 나무에 대한 평균값입니다. 회귀 나무의 경우 노드 불순도는 훈련 RSS에 의해 측정되고 분류 나무는 이탈도에 의해 측정됩니다. 이러한 중요도 측정치에 대한 그림은 `varImpPlot()` 함수를 사용하여 생성할 수 있습니다.
+
+```{r chunk24}
+varImpPlot(rf.boston)
+```
+
+결과는 랜덤 포레스트에서 고려되는 모든 나무에서 공동체의 부('lstat')와 주택 크기('rm')가 단연 두 가지 가장 중요한 변수임을 보여줍니다.
+
+## 부스팅
+여기서는 `gbm`패키지에서 제공하는 `gbm()` 함수를 이용하여 부스트된 회귀나무를 `Boston` 데이터셋에 적용해보겠습니다. 회귀 나무를 다룰 것이기 때문에 `distribution = "gaussian"`을 지정합니다. 만약 이진분류문제를 다룬다면 `distribution = "bernoulli"`를 지정할 수 있습니다. `n.trees=5000`은 우리가 $5000$개의 나무를 학습한다는 것을 의미하며, `interaction.depth=4`는 나무의 깊이를 4로 제한합니다. 
+
+```{r chunk25}
+library(gbm)
+set.seed(1)
+boost.boston <- gbm(medv ~ ., data = Boston[train, ],
+    distribution = "gaussian", n.trees = 5000,
+    interaction.depth = 4)
+```
+
+`summary()` 함수는 변수들의 상대 영향도를 출력해줍니다. 
+
+```{r chunk26}
+summary(boost.boston)
+```
+
+부스팅 모형에서도 `lstat`와 `rm`이 가장 중요한 변수임을 알 수 있습니다. 또한 이 두 변수에 대해 *부분 의존성 그림(partial dependence plot)*을 생성할 수 있습니다. 이 그림들은 선택한 변수가 다른 변수를 *통합(integrating)*한 후 반응에 미치는 한계 효과(marginal effect)를 보여줍니다. 예상대로 중위주택가격은 `rm`이 증가함에 따라 증가하고 `lstat`이 증가함에 따라 감소합니다.
+
+```{r chunk27}
+plot(boost.boston, i = "rm")
+plot(boost.boston, i = "lstat")
+```
+
+
+이제 부스팅 모형을 시험 자료셋에 적용해보겠습니다. 
+
+```{r chunk28}
+yhat.boost <- predict(boost.boston,
+    newdata = Boston[-train, ], n.trees = 5000)
+mean((yhat.boost - boston.test)^2)
+```
+
+시험 데이터셋에 대한 MSE는 $16.58$로 배깅이나 랜덤포레스트에서 얻은 시험 MSE보다도 뛰어납니다. 부스팅에서 사용되는 $\lambda$의 기본값은 0.001입니다. 우리는 이 값을 변경하여 부스팅 모형의 학습속도를 변경할 수 있습니다. 이번에는 $\lambda=0.2$로 해볼까요?
+
+```{r chunk29}
+boost.boston <- gbm(medv ~ ., data = Boston[train, ],
+    distribution = "gaussian", n.trees = 5000,
+    interaction.depth = 4, shrinkage = 0.2, verbose = F)
+yhat.boost <- predict(boost.boston,
+    newdata = Boston[-train, ], n.trees = 5000)
+mean((yhat.boost - boston.test)^2)
+```
+
+$\lambda=0.2$로 학습한 모형은 $\lambda=0.001$로 학습한 모형보다 높은 시험 MSE를 보여주었습니다. 
+
+
+

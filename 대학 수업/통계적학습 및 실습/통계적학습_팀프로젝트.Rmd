@@ -1,0 +1,275 @@
+---
+title: "통계적학습 및 실습"
+author: "기지훈 이강현"
+date: "possum regression"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+```{r chunk1}
+library(glmnet)
+library(tidyverse)
+```
+
+
+#ridge lasso model
+
+##data structures
+
+possum(주머니쥐) 데이터 셋을 이용하여 hdlngth(머리둘레)를 예측하는 ridge lasso모델을 적합해 보겠습니다.
+```{r chunk2}
+possum<-read.csv("possum.csv")
+head(possum)
+dim(possum)
+```
+104개의 row와 14개의 col로 이루어진 데이터이다.
+
+데이터의 "Pop","Sex" 변수가 명목형으로 지정되어있다.
+"Pop" 변수는 "Vic"이면 1 "other"이면 0로 코딩하였고,"sex"변수는 m이면 1 f면 0로 인코딩하였습니다.
+
+
+
+```{r chunk3}
+str(possum)
+possum$Pop<-as.factor(ifelse(possum$Pop == "Vic","1","0"))
+possum$sex<-as.factor(ifelse(possum$sex == "m" ,"1","0"))
+```
+
+case
+observation number
+
+ site
+주머니쥐가 갇힌 일곱 곳 중 하나 장소 순서대로 Cambarville, Bellbird, Whian Whian, Byrangery, Conondale, Allyn River Bulburin이 있다.
+
+ Pop
+현장을 "Vic Victoria", "other"(New South Wales, Queensland)로 분류하는 요인 
+ ("Vic"=1 , "other"=0)
+ 
+ sex
+성별 f 여자 m 남자   (m=1,f=0)
+
+ age
+나이
+
+ hdlngth
+머리 둘레
+
+ skullw
+두개골 폭
+
+ totlngth
+총 둘레
+
+ taill
+꼬리 길이
+
+ footlgth
+발 길이
+
+ earconch
+귀 고리 길이
+
+ eye
+ 눈 길이
+
+ chest
+가슴둘레 (in cm)
+
+ belly
+배 둘레 (in cm)
+
+## colums summary
+결측값이 3개 발견하여 제거하였습니다.
+"hdlnght"의 분포를 확인 할 수 있습니다.
+```{r chunk4}
+attach(possum)
+summary(possum)
+sum(is.na(possum))
+possum<-na.omit(possum)
+hist(possum$hdlngth)
+```
+
+
+선형관계로 예상가능한 변수간에 선형성을 확인하기 위하여 산점도를 그려보겠습니다.
+```{r chunk5}
+g1<-ggplot(data=possum)+
+  geom_point(aes(x=skullw,y=hdlngth))
+g2<-ggplot(data=possum)+
+  geom_point(aes(x=totlngth,y=hdlngth))
+g3<-ggplot(data=possum)+
+  geom_point(aes(x=belly,y=hdlngth))
+
+
+gridExtra::grid.arrange(g1,g2,g3,ncol=3)
+
+```
+
+
+```{r chunk6}
+a1<-ggplot(data=possum,mapping=aes(x=sex,y=hdlngth,fill=sex))+
+  geom_boxplot()+coord_flip()
+a2<-ggplot(data=possum,mapping=aes(x=as.factor(site),y=hdlngth,fill=site))+
+  geom_boxplot()+coord_flip()
+a3<-ggplot(data=possum,mapping=aes(x=Pop,y=hdlngth,fill=Pop))+
+  geom_boxplot()+coord_flip()+labs(y="site")
+
+gridExtra::grid.arrange(a1,a2,a3)
+```
+
+
+male의 hdlngth가 female의 hlngth의 길이보다 전반적으로 넓은범위를 가지고 평균적으로 male이 더 큰값을 가지는것을 확인 할 수있다.
+서식지가 other의 hdlngth가 Vic의 hlngth의 길이보다 전반적으로 넓은범위를 가지고 평균적으로 Pop서식지가 더 큰값을 가지는것을 확인 할 수있다.
+site,levels=c("Cambarville", "Bellbird", "Whian Whian", "Byrangery", "Conondale", "Allyn River", "Bulburin") 순으로 정렬해 있다.
+Byrangery에 위치한 possum이 더 큰 hdlngth값을 가진는 것을 확인 할 수 있다.
+"Allyn River"에 위치한 possum이 전반적으로 작은 hdlngth를 가지는 것을 확인 할 수 있다.
+
+------------------------------------------------------
+
+
+반응변수 y 를 'hdlngth'로 하여 모델링 해 보겠습니다.
+먼저 train set과 test셋을 7:3으로 split하였습니다. "Pop" 변수는 "Vic"이면 1 "other"이면 0로 코딩하였고,"sex"변수는 m이면 1 f면 0로 코딩하였습니다.
+"case",intercept colum은 제거해주었습니다.
+```{r chunk7}
+set.seed(123)
+ind<-sample(dim(possum)[1], size=dim(possum)[1]*0.7, replace = FALSE)
+possum.train<-possum[ind,]
+possum.test<-possum[-ind,]
+x.train<-model.matrix(hdlngth~.,data=possum.train)[,-c(1,2)]
+y.train<-possum.train$hdlngth
+x.test<-model.matrix(hdlngth~.,data=possum.test)[,-c(1,2)]
+y.test<-possum.test$hdlngth
+```
+후보 $\lambda$ 값으로 $10$부터 $-10$까지 동일한 간격으로 이루어진 수열을 `exp(1)`의 거듭제곱으로 한 값을 고려하여 gird search를 하였습니다.
+
+##ridge model
+```{r chunk8}
+grid = exp(1)^(seq(10,-10, length = 100))
+ridge<-glmnet(x.train,y.train,alpha=0,lambda=grid,family = 'gaussian')
+plot(ridge,xvar='lambda')
+```
+
+교차검증을 통해 최적의 $\lambda$를 선택하겠습니다. 데이터의 크기가 크지않으므로 fold=5로 하여 교차검증을 실시하였습니다. 교차검증오차가 최소가 되게 하는 best lambda값을 0.8548508로 지정하겠습니다.
+
+```{r chunk9}
+set.seed(123)
+  cv.ridge <- cv.glmnet(x.train,y.train,nfold=5,alpha=0)
+bestlam <- cv.ridge$lambda.min
+bestlam
+```
+이제 bestlam를 이용하여 만든 ridge모델에 test데이터를 적학하여 MSE를 구해보겠습니다.
+```{r chunk10}
+ridge.pred<-predict(ridge,x.test,s = bestlam)
+ridge.mse<-mean((ridge.pred-y.test)^2)
+ridge.mse 
+```
+##lasso model
+이번엔 lasso medel을 적용하겠습니다. 데이터는 앞에서 사용한 데이터를 사용하겠습니다. 
+grid search를 하기위한 lambda또한 같은 범위를 사용하였습니다.
+```{r chunk11}
+lasso<-glmnet(x.train,y.train,alpha=1,family = 'gaussian',lambda=grid)
+```
+
+ridge에서와 같이 nfold를 5로하여 교차검증오류가 최소가 되는 lambda를 찾아주겠습니다.
+bestlam2=0.1795733 로 정하였습니다.
+```{r chunk12}
+set.seed(123)
+cv.lasso<-cv.glmnet(x.train,y.train,nfold=5,lambda = grid)
+bestlam2<-cv.lasso$lambda.min
+plot(lasso,xvar='lambda')
+bestlam2
+```
+여기서 lasso 모델은 변수선택기능이 있어서 ${beta}$를 0으로 하여 모델을 축소시킵니다.
+```{r chunk13}
+predict(lasso,s=bestlam2,type="coefficients")
+```
+변수선택결과  "site","Pop","taill","earconch","eye"변수가 제거되었습니다.
+이렇게 선택된 변수로 만들어진 lasso 모델을 test데이터에 적합시켜보겠습니다.
+```{r chunk14}
+lasso.pred<-predict(lasso,x.test,s=bestlam2)
+lasso.mse<-mean((lasso.pred-y.test)^2)
+lasso.mse
+```
+##regsubset
+
+이번엔 lasso에서 선택된 변수와 부분선택법에서 선택된 변수간 차이를 
+확인해보겠습니다.최상의 부분선택법은 rss값을 기준으로 합니다.
+일딴 14개의 변수를 모두 포함하는 선형모델을 만들어 보겠습니다.
+```{r chunk15}
+library(leaps)   
+regfit.full <- regsubsets(hdlngth ~ ., possum,nvmax=14)
+reg.summary<-summary(regfit.full)
+```
+
+```{r chunk16}
+names(reg.summary)
+par(mfrow = c(2, 2))
+plot(reg.summary$rss, xlab = "Number of Variables",
+    ylab = "RSS", type = "l")
+rss.min<-which.min(reg.summary$rss)
+points(rss.min,reg.summary$rss[rss.min],col="red",cex=2,pch=20)
+
+plot(reg.summary$adjr2, xlab = "Number of Variables",
+    ylab = "Adjusted RSq", type = "l")
+adjr2.max<-which.max(reg.summary$adjr2)
+points(adjr2.max, reg.summary$adjr2[adjr2.max], col = "red", cex = 2, 
+    pch = 20)
+
+plot(reg.summary$cp, xlab = "Number of Variables",
+    ylab = "Cp", type = "l")
+cp.min<-which.min(reg.summary$cp)
+points(cp.min, reg.summary$cp[cp.min], col = "red", cex = 2,
+    pch = 20)
+
+plot(reg.summary$bic, xlab = "Number of Variables",
+    ylab = "BIC", type = "l")
+bic.min<-which.min(reg.summary$bic)
+points(bic.min, reg.summary$bic[bic.min], col = "red", cex = 2,
+    pch = 20)
+```
+```{r chunk17}
+plot(regfit.full, scale = "r2")
+plot(regfit.full, scale = "adjr2")
+plot(regfit.full, scale = "Cp")
+plot(regfit.full, scale = "bic")
+```
+
+여기서 가장 간단한 모델인 bic값이 가장 최소가 되는 변수의 개수 4로 하여 만들어진
+모델의 coefficient를 확인해보겠습니다.
+```{r chunk18}
+coef(regfit.full,4)
+```
+
+이렇게 선택된 선형 모델을 만들어 설명변수와 "hdlngth"간의 관계를 확인할 수 있습니다.
+그리고 이 때의 mse 값을 구해보겠습니다.
+
+```{r chunk19}
+form<-as.formula('hdlngth~sex+skullw+totlngth+belly')
+reg.fit<-lm(form,data=possum,subset = ind)
+summary(reg.fit)
+reg.pred<-predict(reg.fit,possum.test)
+reg.mse<-mean((reg.pred-y.test)^2)
+reg.mse
+```
+lasso에서 선택된 변수와 subset방법에서 선택된 변수의 차이를 확인해 보겠습니다.
+```{r chunk20}
+predict(lasso,s=bestlam2,type="coefficients")
+coef(reg.fit)
+```
+lasso에서는 "sex","age","skullw","totlngth","footlgth","chest","belly"
+regsubset에서는 "sex""skullw","totlngth","belly" 변수가 선택되었디.
+
+lasso에서 선택된 "age","footlgth","chest"변수가 제거된것을 확인할 수 있습니다.
+
+##결과
+
+
+```{r chunk21}
+c(lasso.mse,ridge.mse,reg.mse)
+```
+
+세가지 선형모형에서 mse의 값을 비교하였을 때 regsubset으로 변수를 선택하여 만든 모델의 mse값이 가장 작게 나타났습니다.
+부분선택법으로 모델링하여 선택된 설명변수인 skullw,totlngth,belly변수는 처음 EDA과정에서 예상한것과 같이 hdlnght변수와 양의상관관계를 가지는 것을
+확인할 수 있었습니다.
+

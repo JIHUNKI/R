@@ -1,0 +1,302 @@
+---
+title: "통계학특강"
+author: "강종경"
+header-includes: \usepackage{setspace}\doublespacing
+output:
+  pdf_document:
+    latex_engine: xelatex
+    extra_dependencies: ["kotex","amsmath"]
+    keep_tex: yes
+  word_document: default
+  html_document:
+    df_print: paged
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.11.2
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+mainfont: NanumGothic
+editor_options:
+  markdown:
+    wrap: sentence
+fontsize: 12pt
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### 라쏘를 넘어서
+
+우리가 자주 사용했던 `Hitters` 데이터를 이용하겠습니다. 먼저 다음과 같이 결측치를 제거해보겠습니다.
+
+```{r data}
+library(ISLR2)
+head(Hitters)
+names(Hitters)
+dim(Hitters)
+sum(is.na(Hitters$Salary))
+Hitters <- na.omit(Hitters)
+dim(Hitters)
+sum(is.na(Hitters))
+```
+`model.matrix()`함수를 이용해서 `Hitters` 데이터로부터 설명변수 행렬을 추출합니다. 
+훈련자료와 시험 자료도 미리 나눠줍니다.
+
+```{r xy}
+x <- model.matrix(Salary ~ ., Hitters)[, -1]
+y <- Hitters$Salary
+set.seed(1)
+train <- sample (1: nrow(x), nrow(x)/2)
+test <- (-train)
+y.test <- y[test]
+```
+
+뒤에서 사용할 적응적 LASSO에 활용하기 위해 가중치를 미리 구해놓겠습니다. `lm()`함수를 이용해서 회귀계수들을 구하고, 회귀계수의 절대값의 역수를 가중치로 계산합니다. 절편에는 벌점이 가해지지 않기 때문에, 절편항을 제외하고 계산함에 주의합니다.
+
+```{r weight}
+coef_lse<- lm(y~x, data=Hitters[train,])
+w3 <- 1/abs(coef(coef_lse)[-1])
+w3
+```
+
+LASSO의 적합은 `glmnet` 패키지에서 제공하는 `glmnet`함수를 이용하여 할 수 있습니다. 여기서 `alpha =1`일 때는 LASSO를 `alpha=0`일때는 능형회귀를 수행해줍니다. `lasso.mod`에 기본 LASSO 모형을 먼저 적합하고, `cv.lasso`에 `cv.glmnet`함수를 이용하여 교차검증에서 최적의 `lambda`를 찾아냅니다. 최적의 `lambda`는 `cv.lasso$lambda.min`에 저장되어 있습니다. 이때의 회귀계수를 확인하고 싶으면 `coef()`함수를 이용하여 `coef(cv.lasso, s=cv.lasso$lambda.min)`와 같이 입력하면 됩니다. 
+
+```{r lasso}
+##Lasso
+library(glmnet)
+
+grid <- 10^seq(10, -2, length = 100)
+lasso.mod <- glmnet(x, y, alpha = 1, lambda =grid)
+set.seed(1)
+cv.lasso <- cv.glmnet(x[train,], y[train], family='gaussian', alpha=1, standardize=TRUE, type.measure='mse')
+lam.lasso <- cv.lasso$lambda.min
+coef(cv.lasso, s=cv.lasso$lambda.min)
+```
+이제 `predict()`함수를 이용하여 LASSO에서의 적합결과를 확인해봅시다. 인수 `s`에는 최적의 lambda값 `lam.lasso`를, `newx`에는 시험자료 `x[test,]`를 입력합니다. 그리고 평균제곱오차를 계산해봅시다. 
+
+```{r lasso2}
+
+lasso.pred <- predict(lasso.mod, s = lam.lasso,
+    newx = x[test, ])
+mean((lasso.pred - y.test)^2)
+
+```
+
+적응적 LASSO는 `penalty.factor = weight` 옵션만 추가하면 됩니다. 여기서 `weight`는 앞서 구했던 `w3`값을 이용합니다. 
+
+```{r alasso}
+## Adaptive Lasso
+set.seed(1)
+alasso.mod <- glmnet(x, y, alpha = 1, lambda = grid, penalty.factor=w3)
+cv.alasso <- cv.glmnet(x[train,], y[train], family='gaussian', alpha=1, standardize=TRUE, type.measure='mse', penalty.factor=w3)
+lam.alasso <- cv.alasso$lambda.min
+coef(cv.lasso, s=cv.alasso$lambda.min)
+```
+위와 같은 방법으로 적응적 LASSO에서의 평균제곱오차를 구할 수 있습니다. 
+
+```{r alasso2}
+alasso.pred <- predict(alasso.mod, s = lam.alasso,
+    newx = x[test, ])
+mean((alasso.pred - y.test)^2)
+```
+
+SCAD 벌점함수를 이용한 회귀는 `ncvreg`패키지에서 제공합니다. `glmnet()`함수와 비슷한 형태로 작동하며 `penalty ="SCAD"`를 추가하면 SCAD벌점함수가 적용된 결과를 제공해줍니다. 여기서도 마찬가지로 `cv.ncvreg()`함수를 이용하여 최적의 `lambda`를 구할 수 있습니다. `coef(cv.scad)`는 기본적으로 최적의 lambda`값에서의 회귀계수를 출력해줍니다. 
+
+```{r scad}
+library(ncvreg)
+scad.mod <-ncvreg(x[train,],y[train], family ="gaussian", penalty = "SCAD")
+cv.scad <-cv.ncvreg(x[train,],y[train], family ="gaussian", penalty = "SCAD", seed =1)
+coef(cv.scad)
+```
+
+SCAD로 적합한 객체에 `plot()` 함수를 적용하면 회귀계수들의 적합 경로를 살펴볼 수 있습니다. 
+
+
+```{r scad_plot}
+plot(scad.mod)
+```
+
+`cv.ncvreg()` 함수의 적합결과에 `plot()`함수를 적용하면 $\log(\lambda)$`에 따른 교차검증오차를 출력해줍니다. 최적의 lambda값은 이 값을 근거로 정해집니다. 
+
+```{r scad_plot2}
+plot(cv.scad)
+```
+
+교차검증 오차를 최소화 하는 lambda는 `cv.scad$lambda.min`에 저장되어 있습니다. 이 lambda값에서의 예측값을 계산하고 시험자료에서의 MSE를 계산해봅시다.
+
+```{r scad2}
+scad.pred <- predict(scad.mod, X = x[test, ],  lambda =cv.scad$lambda.min)
+mean((scad.pred - y.test)^2)
+```
+
+이와 유사하게 MCP 벌점함수를 사용해서 모형을 적합해봅시다. `cv.ncvreg()`함수에서 단순히 `penalty ="MCP"`로 바꿔주면 MCP벌점함수를 적용했을 때의 최적의 lambda를 찾을 수 있습니다.
+
+```{r mcp}
+library(ncvreg)
+cv.mcp <-cv.ncvreg(x[train,],y[train], family ="gaussian", penalty = "MCP", seed =1)
+cv.mcp$lambda.min
+coef(cv.mcp)
+```
+
+교차검증 오차를 최소화 하는 lambda는 `cv.mcp$lambda.min`에 저장되어 있습니다. 이 lambda값에서의 예측값을 계산하고 시험자료에서의 MSE를 계산해봅시다.
+
+```{r mcp2}
+mcp.pred <- predict(cv.mcp, X = x[test, ], lambda=cv.mcp$lambda.min)
+mean((mcp.pred - y.test)^2)
+```
+
+
+## 충분 차원 축소(Sufficient Dimension Reduction)
+
+
+
+`dr`패키지는 다양한 충분 차원 축소(Sufficient Dimension Reduction)기법들을 적합할 수 있는 함수들을 포함하고 있습니다. 먼저 실제 차원이 1인 비선형 모형을 생성해보겠습니다.  
+
+```{r sir1}
+library(dr)
+set.seed(1)
+n <- 100
+p <- 5
+x <- matrix(rnorm(n * p), n, p)
+B <- c(1,-1,0,0,0)/sqrt(2)
+XB <- x %*% B
+y <- exp(0.5 * XB) + rnorm(n, 0, 0.1)
+```
+
+
+
+### 분할역회귀
+
+`dr()`함수를 이용하여 분할역회귀를 수행할 수 있습니다. 이를 위해 `method ="sir"`를 지정하면 됩니다. `nslice =10`은  
+반응변수를 나누는 슬라이스의 수를 지정하며, 너무 적거나 많지만 않으면 안정된 성능을 보여줍니다. 
+`obj`에 분할역회귀 수행 결과가 저장되어있다면 `obj$evectors`에 작업행렬의 고유벡터가, `obj$evalues`에 고유값이 저장되어 있습니다. 
+
+
+```{r sir2}
+obj <- dr(y ~ x, method = "sir", nslices = 10)
+obj$evectors
+obj$evalues
+```
+
+고유값의 변화를 볼 때 하나의 차원 축소 벡터로 충분해 보입니다. `summary(obj)$test`를 통해 구조적 차원 $d$에 대한 검정 결과를 확인할 수 있습니다 .
+
+```{r sir3}
+summary(obj)$test
+```
+
+검정결과 구조적 차원은 $d=1$이 선택되었으며, 이때의 고유벡터를 $B$행렬(벡터)로 두겠습니다. 이제 실제 $y$의 평균인 $XB$와 추정값 $X\hat{B}$이 얼마나 차이나는 지 확인해봅시다.
+
+```{r sir4}
+B.hat <- obj$evectors[,1]
+XB.hat <- x %*% B.hat 
+plot(XB, y)
+points(XB.hat, y, col = 2, pch = 2)
+cor(XB, XB.hat)
+```
+$XB$와 $X\hat{B}$의 상관계수는 0.9995로 거의 완벽하게 $XB$를 추정함을 확인할 수 있습니다. 
+
+구조적 차원 $d$를 정하기 위한 방법으로 순열검정법도 적용할 수 있습니다. 여기서도 동일하게 $d=1$임을 보여줍니다.
+
+```{r perm}
+obj.d <- dr.permutation.test(obj, npermute = 50)
+obj.d
+```
+
+이번에는 반응변수가 $XB$에 대해 완전히 대칭인 예제를 살펴봅시다. 이때 앞서 살펴본 분할역회귀 방법은 잘 작동하지 않음을 확인할 수 있습니다.
+
+```{r ex2}
+y2 <- (0.5 * XB)^2 + rnorm(n, 0, 0.1)
+obj1 <- dr(y2 ~ x, method = "sir", nslices = 10)
+B.hat1 <- obj1$evectors[,1]
+XB.hat1 <- x %*% B.hat1 
+plot(XB, y2, pch = 19);points(XB.hat1, y2, col = 2, pch = 2)
+abs(cor(XB, XB.hat1))
+```
+### 분할 평균 분산 추정
+
+분할 평균 분산추정은 각 분할에서의 평균을 추정하는 대신 분산을 추정하므로, 이러한 문제를 해결할 수 있습니다. 분할 평균 분산 추정은 `method="save"`를 지정함으로써 수행할 수 있습니다. 
+
+```{r save}
+obj2 <- dr(y2 ~ x, method = "save", nslices = 10)
+B.hat2 <- obj2$evectors[,1]
+XB.hat2 <- x %*% B.hat2
+plot(XB, y2, pch = 19);points(XB.hat2, y2, col = 2, pch = 2)
+abs(cor(XB, XB.hat2))
+
+obj.d2 <- dr.permutation.test(obj2, npermute = 50)
+```
+상관계수가 0.97로 매우 높으므로 5개의 설명변수 $X$대신 $X\hat{B}$를 써도 충분할 것입니다. 
+
+이번에는 우리가 많이 다뤘던 `Hitters` 데이터에 대해서도 충분 차원 축소 기법을 적용해봅시다. 
+먼저 자료를 훈련자료와 시험자료로 나누겠습니다.
+
+```{r xy2}
+x <- model.matrix(Salary ~ ., Hitters)[, -1]
+y <- Hitters$Salary
+train <- sample (1: nrow(x), nrow(x)/2)
+test <- (-train)
+y.test <- y[test]
+```
+
+훈련자료에 대해 분할역회귀를 수행해보고 구조적차원 $d$를 결정해봅시다. 
+
+```{r sir_r}
+obj_sir<-dr(y[train]~x[train,], method="sir", nslice = 10)
+obj.d_sir <- dr.permutation.test(obj_sir, npermute = 50)
+obj.d_sir
+```
+
+구조적 차원은 $d=2$로 선택되었습니다. 이를 이용하여 새로운 데이터를 생성해봅시다.
+
+```{r sir_r2}
+B.hat_sir <- obj_sir$evectors[,1:2]
+XB.hat_sir <- x[train,] %*% B.hat_sir
+XB.hat_sir2 <- x[test,] %*% B.hat_sir
+ndata_sir<-data.frame(y=y[train], x=XB.hat_sir)
+ndata_sir2<-data.frame(y=y[test], x=XB.hat_sir2)
+```
+
+만약 반응변수와 $X$가 선형적 관계만 존재했다면 $d=1$로 선택되었을 것입니다. $d=2$이므로, 비선형적 모형이 적합해보입니다. 앞서 배웠던 일반화 가법모형을 적용해봅시다. 모형 형태는 자연스플라인으로 하였습니다. 
+
+```{r sir_r3}
+library(gam)
+gam.sir <- gam(y ~ ns(x.Dir1) + ns(x.Dir2), data = ndata_sir)
+sir.pred <- predict(gam.sir, newdata = ndata_sir2)
+mean((sir.pred - ndata_sir2$y)^2)
+
+```
+
+같은 방법으로 이번에는 분할 평균 분산 추정 기법으로도 시도해보겠습니다. 
+
+```{r save_r}
+obj_save<-dr(y[train]~x[train,], method="save", nslice = 10)
+summary(obj_save)$test
+obj.d_save <- dr.permutation.test(obj_save, npermute = 50,10)
+obj.d_save
+```
+
+SAVE 기법은 적절한 구조적 차원을 선택하지 못했습니다. 아쉬운대로(?) $d=1$을 선택하고 추가 분석을 진행해봅시다. 
+
+```{r save_r2}
+B.hat_save <- obj_save$evectors[,1]
+XB.hat_save <- x[train,] %*% B.hat_save
+XB.hat_save2 <- x[test,] %*% B.hat_save
+ndata_save<-data.frame(y=y[train], x=XB.hat_save)
+ndata_save2<-data.frame(y=y[test], x=XB.hat_save2)
+```
+
+```{r save_r3}
+library(gam)
+gam.save <- gam(y ~ ns(x), data = ndata_save)
+save.pred <- predict(gam.save, newdata = ndata_save2)
+mean((save.pred - ndata_save2$y)^2)
+
+```
+ 이 문제에서 SAVE 기법을 이용한 회귀는 가장 나쁜 예측 오차를 보여주었습니다. 

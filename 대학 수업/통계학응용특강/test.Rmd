@@ -1,0 +1,158 @@
+---
+title: "통계학응용 특강 중간시험"
+author: "기지훈"
+date: "201610303"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+먼저 다음을 실행시키세요. 
+
+```{r}
+library(tidyverse)
+library(Lahman)
+People <- as_tibble(People)
+Teams <- as_tibble(Teams)
+Batting <- as_tibble(Batting)
+Salaries <- as_tibble(Salaries)
+```
+
+`People` 데이터에서 1990년도 이후에 태어난 선수들만 선택하여 `People90`으로 저장하세요. 선수들의 태어난 연도는 `birthYear` 변수에 기록되어 있습니다. 
+
+```{r}
+People90<-People%>%filter(birthYear>=1990)
+```
+
+`People90` 데이터의 `playerID`는 primary key인가요? 확인하기 위한 코드를 작성해보세요. 
+
+```{r}
+People90 %>%
+  count(playerID) %>%
+  filter(n > 1)
+
+length(unique(People90$playerID))
+dim(People90)[1]
+# primary key 이다.
+```
+`People90` 데이터에서 `death`가 포함된 변수들을 제거하여 `People90` 데이터를 업데이트하세요.
+
+```{r}
+People90<-People90%>%select(-starts_with("death"))
+
+People90<-People90%>%select(!contains("death"))
+```
+
+`People90` 데이터에서 `birthDate`를 제외한 다른 `birth`가 들어간 변수들을 제거하여 `People90` 데이터를 업데이트 하세요. 데이터의 정렬순서는 관계 없지만 `birthDate`가 가장 먼저 오게 하는 게 쉬울거에요.
+
+```{r}
+birthDate<-People90$birthDate
+People90<-People90%>%select(-starts_with("birth"))
+People90$birthDate<-birthDate  
+```
+
+`birthDate`를 `bYear`, `bMonth`, `bDate`로 분리하여 `People90` 데이터를 업데이트 하세요. 단, `bYear`, `bMonth`, `bDate`가 `character`가 아닌 수치 값을 갖도록 합니다. 
+```{r}
+People90 <- People90%>%
+  separate(birthDate, c("bYear", "bMonth", "bDate"), sep = "-", convert = TRUE)
+```
+
+
+`weight`와 `height` 변수는 각각 파운드(lb)와 인치(in)로 기록되어 있습니다. 1파운드는 0.454kg, 1인치는 2.54cm임을 이용하여, `weight`와 `height` 변수의 단위를 각각 kg와 cm로 바꿔서 `People90`데이터를 업데이트 하세요. 편의상 소숫점자리는 반올립합니다. 반올림하는 함수는 `round()` 입니다. 
+
+```{r}
+(People90<-People90%>%
+  mutate(weight = round((weight*0.454)),
+         height = round((height*2.54)),
+         .keep="unused"))
+
+```
+
+`People90` 데이터를 `Batting` 데이터와 선수들의 ID `playerID`에 대해 `inner_join` 해보세요. 결과를 `People90full`에 저장하세요.
+
+```{r}
+(People90full<-People90%>%inner_join(Batting,by="playerID"))
+```
+
+`People90full` 데이터의 선수들의 팀 이름을 `Teams` 데이터의 `name`변수를 이용하여 추가해보세요. `People90full` 데이터의 길이가 늘어나지 않도록 주의합니다!
+
+```{r}
+
+(People90full <- People90full %>%
+  inner_join(select(Teams, teamID, yearID, name)))
+
+```
+`People90full` 데이터의 선수들의 연봉을 `Salaries` 데이터를 이용하여 추가하여 `People_salary` 에 저장합니다. 연봉이 기록되지 않은 선수들도 남겨두길 바랍니다. 
+
+
+```{r}
+People_salary<-People90full%>%
+  left_join(Salaries)
+```
+
+`People_salary` 데이터의 팀별(name) 평균연봉(`av_sal`로 이름을 붙이세요)과 선수 수(`nplayer`로 이름을 붙이세요)를 계산하고 평균연봉이 높은 순으로 출력해보세요.
+```{r}
+People_salary%>%group_by(name)%>%summarise(av_sal=mean(salary,na.rm=T),
+                                           nplayer=n())%>%
+  arrange(desc(av_sal))
+```
+
+`People_salary` 데이터에서 `salary`가 1000000 이상, `G`가 50이상인인 선수들만 모아
+`People_10`으로 저장하세요.
+
+```{r}
+People_10<-People_salary%>%filter(salary>=1000000)%>%filter(G>=50)
+```
+
+`People_10` 데이터에 age변수를 추가하세요. age는 `yearID`와 `bYear`를 뺀 값으로 계산하세요. 
+
+```{r}
+People_10<-People_10%>%mutate(age=yearID-bYear)
+```
+
+
+`People_10` 데이터의 `salary` 변수를 `x`축으로 하고, `H` 변수를 `y`축으로 한 산점도를 그려봅시다.
+
+```{r}
+ggplot(data=People_10)+
+  geom_point(mapping=aes(x=salary,y=H))
+```
+혹시 이상치로 보이는 선수가 있나요? 만약 있다면 그 선수가 누구인지 말하고, People_10데이터에서는 제거하세요.
+
+```{r}
+which.max(People_10$salary)
+People_10[42,]  ## Mike Trout
+People_10<-People_10[-42,]
+```
+
+
+
+위의 그림을 색상은 `age`에 따라 다르게, 점의 크기는 `HR`에 따라 다르게 그려보세요. 그림의 결과는
+`plot1`이라는 이름으로 저장합니다. 
+
+
+```{r}
+(plot1<-ggplot(data=People_10)+
+  geom_point(mapping=aes(x=salary,y=H,color=age,size=HR)))
+```
+위에서 그린 그림을 통해 다음 관계를 설명할 수 있나요? 그렇다면 관계를 한 줄로 간단하게 요약해보세요. `salary`는 연봉, `H`는 안타수, `G`는 출전경기 수, `HR`은 홈런 수 입니다.  
+
+1. `salary` vs `H` : 큰 관계가 보여지지않는다.
+
+2. `salary` vs `HR` : 큰 관계가 보여지지않느다.
+
+3. `salary` vs `age` :age가 많을 수록 salary가 높은 경향이보인다.
+
+위 그림을 각 리그 (`lgID`) 별로 그려보세요. `smooth` 곡선도 추가하세요. 위에서 저장된 `plot1`을 이용합니다. 
+
+```{r}
+plot1+
+  facet_grid(~lgID)+
+  geom_smooth(mapping=aes(x=salary,y=H),se=F)
+```
+
+고연봉 선수들(현재 데이터입니다)의 리그별 안타(H)와 연봉과의 관계를 간단하게 설명해보세요. 
+
+AL리그에서 안타를 더많이 치는 경향이 보여진다.

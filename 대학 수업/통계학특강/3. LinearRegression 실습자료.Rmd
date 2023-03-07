@@ -1,0 +1,366 @@
+---
+title: "통계학특강"
+author: "강종경"
+jupyter:
+  jupytext:
+    formats: ipynb,Rmd
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.11.2
+  kernelspec:
+    display_name: R
+    language: R
+    name: ir
+output:
+  pdf_document:
+    latex_engine: xelatex
+    extra_dependencies: kotex
+    keep_tex: yes
+  html_document:
+    df_print: paged
+  word_document: default
+editor_options:
+  markdown:
+    wrap: sentence
+---
+
+# 선형 회귀(Linear Regression)
+
+## 라이브러리(Libraries)
+
+`library()` 함수는 기본 R 분포에 포함되지 않은 *라이브러리* 또는 함수 및 데이터셋 그룹을 로드하는 데 사용됩니다.
+최소 제곱 선형 회귀 분석 및 기타 간단한 분석을 수행하는 기본 함수는 기저 분포와 함께 표준으로 제공되지만 더 이질적인 함수는 추가 라이브러리가 필요합니다.
+여기서는 데이터셋 및 함수의 매우 큰 집합인 MASS 패키지를 로드합니다.
+우리는 또한 예제와 관련된 데이터셋을 포함하는 ISLR2 패키지를 로드합니다.
+
+```{r chunk1}
+library(MASS)
+library(ISLR2)
+```
+
+<!-- If you receive an error message when loading any of these libraries, it -->
+
+<!-- likely indicates that the corresponding library has not yet been -->
+
+<!-- installed on your system. Some libraries, such as `MASS`, come with `R` -->
+
+<!-- and do not need to be separately installed on your computer. However, -->
+
+<!-- other packages, such as `ISLR2`, must be downloaded the first time they -->
+
+<!-- are used. This can be done directly from within `R`. For example, on a -->
+
+<!-- Windows system,  select the `Install package` option -->
+
+<!-- under the `Packages` tab.  After you select any mirror site, a -->
+
+<!-- list of available packages will appear. Simply select the package you -->
+
+<!-- wish to install and `R` will automatically download the -->
+
+<!-- package. Alternatively, this can be done at the `R` command line -->
+
+<!-- via `install.packages("ISLR2")`. This installation only needs -->
+
+<!-- to be done the first time you use a package. However, the -->
+
+<!-- `library()` function must be called within each `R` session. -->
+
+## 단순 회귀(Simple Linear Regression)
+
+`ISLR2` 라이브러리에는 보스턴에서 506달러 규모의 인구조사 대상지 중 `medv`(중간 주택 값)를 기록한 `Boston` 데이터셋이 들어 있습니다.
+`rmvar`(주택당 평균 객실 수), `age`(주택 평균 연령), `lstat`(사회경제적 지위가 낮은 가구의 비율) 등 $12$개의 예측 변수들을 활용해 `medv`를 예측해 봅시다.
+
+```{r chunk2}
+head(Boston)
+```
+
+데이터에 대한 더 많은 정보를 확인하려면 `?Boston`을 Console창에 입력합니다.
+
+먼저 `lm()` `medv`를 반응변수로, `lstat`를 예측변수로 하는 간단한 선형 회귀 모델을 적합시키는 것으로 시작해봅시다.
+기본 구문은 `lm(y ~ x, data)`이며, 여기서 `y`는 반응변수이고, `x`는 예측 변수이며, `data`는 이 두 변수가 보관된 데이터셋입니다.
+
+```{r chunk3, error=TRUE}
+lm.fit <- lm(medv ~ lstat)
+```
+
+이 명령어는 `R`이 변수 `medv`와 `lstat`를 어디서 찾아야 하는지 모르기 때문에 오류가 발생합니다.
+따라서 변수들이 `Boston`에 있다는 것을 `R`에 알려줘야 합니다.
+보스턴을 붙이면('attach(Boston)`)`R`이 변수를 인식하기 때문에 앞선 명령어도 잘 작동합니다.
+
+```{r chunk4}
+lm.fit <- lm(medv ~ lstat, data = Boston)
+attach(Boston)
+lm.fit <- lm(medv ~ lstat)
+```
+
+`lm.fit`을 입력하면 모델에 대한 몇 가지 기본 정보가 출력됩니다.
+더 자세한 정보를 위해서는 `summary(lm.fit)`를 사용합니다.
+이렇게 하면 계수에 대한 $p$-값과 표준 오차는 물론 모델에 대한 $R^2$ 통계 및 $F$-통계도 얻을 수 있습니다.
+
+```{r chunk5}
+lm.fit
+summary(lm.fit)
+```
+
+`lm.fit`에 저장되어 있는 다른 정보를 찾기 위해 `names()` 함수를 사용할 수 있습니다.
+`lm.fit$coefficients`으로 이러한 값들을 추출할 수 있지만, `coef()`와 같은 추출기 함수를 사용하여 접근하는 것이 더 안전합니다.
+
+```{r chunk6}
+names(lm.fit)
+coef(lm.fit)
+```
+
+계수 추정치에 대한 신뢰 구간을 구하려면 명령행에 `confint()` 함수를 사용합니다.
+`confint(lm.fit)`를 입력하면 `lm.fit` 의 계수들의 추정치에 대한 신뢰 구간을 얻을 수 있습니다.
+
+```{r chunk7}
+confint(lm.fit)
+```
+
+`predict()` 함수는 주어진 `lstat` 값에서의 `medv`의 신뢰 구간과 예측 구간을 생성하는 데 사용됩니다.
+
+```{r chunk8}
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))),
+    interval = "confidence")
+predict(lm.fit, data.frame(lstat = (c(5, 10, 15))),
+    interval = "prediction")
+```
+
+예를 들어, $10$의 `lstat` 값과 관련된 95,% 신뢰 구간은 $(24.47, 25.63)$이고 95,% 예측 구간은 $(12.828, 37.28)$입니다.
+예상대로 신뢰 구간 및 예측 구간은 같은 점(`lstat`가 10일 때 `medv`에 대한 예측 값은 $25.05$)으로 중심화되지만 예측구간이 보다 더 넓음을 알 수 있습니다.
+
+이제 `plot()` 및 `abline()` 함수를 사용하여 최소 제곱법 회귀선과함께 `medv` 및 `lstat`를 그려봅시다.
+
+```{r chunk9}
+plot(lstat, medv)
+abline(lm.fit)
+```
+
+`lstat`와 `medv` 사이의 관계가 비선형성이라는 몇 가지 정황이 보입니다.
+
+`abline()` 함수는 최소 제곱선뿐만 아니라 어떤 선이든 그릴 수 있습니다.
+절편 `a`와 기울기 `b`로 선을 긋기 위해서는 `abline(a, b)`를 입력합니다.
+선과 점을 표시하기 위한 몇 가지 추가 설정은 아래 코드와 같습니다.
+`lwd = 3` 명령은 회귀선의 너비가 3배 증가하게 하며, 이는 `plot()` 및 `lines()` 함수에도 적용됩니다.
+또한 `pch` 옵션을 사용하여 다른 플로팅 기호를 만들 수 있습니다.
+
+```{r chunk10}
+plot(lstat, medv)
+abline(lm.fit, lwd = 3)
+abline(lm.fit, lwd = 3, col = "red")
+plot(lstat, medv, col = "red")
+plot(lstat, medv, pch = 20)
+plot(lstat, medv, pch = "+")
+plot(1:20, 1:20, pch = 1:20)
+```
+
+`plot()` 함수는 `lm()`의 결과물로부터 자동으로 4개의 진단그림을 생성합니다.
+일반적으로 이 명령어는 한 번에 하나의 그림을 생성하고 *Enter*를 통해 다음 그림을 생성합니다.
+하지만 종종 $4$개의 그림을 한 번에 보는 것이 편할 때가 있습니다.
+`par()`와 `mfrow()`함수를 통해 `R`에게 여러 개의 플롯을 동시에 볼 수 있도록 디스플레이 화면을 별도의 패널로 분할하도록 명령할 수 있습니다.
+예를들어 `par(mfrow = c(2, 2))`는 그리는 영역을 $2 \times 2$ 격자 패널로 나눕니다.
+
+```{r chunk11}
+par(mfrow = c(2, 2))
+plot(lm.fit)
+```
+
+또한 `residuals()` 함수를 사용하여 선형 회귀 적합선의 잔차를 계산할 수 있습니다.
+`rstudent()` 함수는 스튜던트화 잔차를 반환하며 이 함수를 사용하여 적합치에 대한 잔차를 그릴 수 있습니다.
+
+```{r chunk12}
+plot(predict(lm.fit), residuals(lm.fit))
+plot(predict(lm.fit), rstudent(lm.fit))
+```
+
+잔차 그림은 비선형성의 증거를 보여줍니다.
+`hatvalues()` 함수를 사용하여 레버리지 통계량을 계산할 수 있습니다.
+
+### 레버리지(leverage)
+
+사영 행렬 또는 햇(hat)행렬을 $H$라고 합시다.
+$$
+{H}={X}^T({X}^T{X})^{-1}{X}
+$$ **레버리지(leverage)**는 $H$의 대각성분 $h_{ii}$로 정의합니다.
+
+$\hat{y}=Hy$이므로, $H$의 $i$번째 행, $j$번째 열 성분을 $h_{ij}$라고 하면 실제 결과값 $y_i$과 예측값 $\hat{y}_{i}$은 다음과 같은 관계를 가집니다.
+$$\hat{y}_i=h_{i1}y_{1}+h_{i2}y_{2}+\cdots+h_{ii}y_{i}+\cdots+h_{iN}y_{N}$$ 즉, 레버리지는 실제의 결과값 $y_{i}$이 예측값 $\hat{y}_{i}$에 미치는 영향을 나타냅니다.
+
+`which.max()` 함수는 벡터의 가장 큰 원소의 인덱스를 식별합니다.
+이 예제에서는 레버리지 통계량이 가장 큰 관측치를 알 수 있습니다.
+
+```{r chunk13}
+plot(hatvalues(lm.fit))
+which.max(hatvalues(lm.fit))
+```
+
+## 다중 회귀(Multiple Linear Regression)
+
+최소 제곱을 사용하여 다중 선형 회귀 모델형을 적합시키기 위해 'lm()' 함수를 다시 사용합니다.
+구문 `lm(y $\sim$ x1 + x2 + x3)` 는 `x1`, `x2`, `x3`의 세 가지 예측 변수를 가진 모델을 적합시키는 데 사용됩니다.
+이제 `summary()` 함수는 모든 예측 변수에 대한 회귀 계수를 출력합니다.
+
+```{r chunk14}
+lm.fit <- lm(medv ~ lstat + age, data = Boston)
+summary(lm.fit)
+```
+
+`Boston` 데이터셋에는 $12$개의 변수가 포함되어 있으므로 예측 변수를 모두 사용하여 회귀 분석을 수행하려면 모두 입력해야 하는 번거로움이 있습니다.
+대신 다음과 같은 단축형을 사용할 수 있습니다.
+
+```{r chunk15}
+lm.fit <- lm(medv ~ ., data = Boston)
+summary(lm.fit)
+```
+
+객체의 개별 구성 요소에 이름별로 액세스할 수 있습니다( `?summary.lm`을 쳐서 가능한 항목을 찾아보세요).
+예를들어 `summary(lm.fit)$r.sq`은 결정계수 $R^2$을, `summary(lm.fit)$sigma`은 표준오차제곱근을 출력합니다.
+`car`패키지에 포함된 `vif()` 함수는 분산 평창계수(variance inflation factor)를 계산해줍니다.
+이 자료의 경우 대부분의 VIF가 낮거나 적당합니다.
+
+```{r chunk16}
+library(car)
+vif(lm.fit)
+```
+
+### 분산 평창 계수(variance inflation factor)
+
+$X_{j}$를 이를 제외한 나머지 변수들로 회귀시켰을 때의 결정계수를 $R_{X_{j}|X_{-j}}^2$라고 합시다.
+그러면 $j$번째 변수의 분산 평창 계수는 다음과 같이 정의됩니다.
+$$VIF_j=\frac{1}{1-R_{X_{j}|X_{-j}}^2}$$ VIF가 5보다 클 경우 약간의 공선성(collinearity)을 의심해볼 수 있으며, VIF가 10보다 크면 높은 공선성을 의심할 수 있습니다.
+VIF의 최솟값은 1이며, 식을 통해 $R_{X_{j}|X_{-j}}^2$가 1에 가까울 경우, 공선성이 존재하여 VIF가 높아질 것임을 알 수 있습니다.
+
+하나의 변수를 제외한 모든 변수를 사용하여 회귀 분석을 수행하려는 경우 어떻게 할까요?
+예를 들어, 위의 회귀 분석 출력에서 `age`는 높은 $p$-값을 갖습니다.
+따라서 이 예측 변수를 제외하고 회귀 분석을 실행할 수 있습니다.
+다음 구문은 `age`를 제외한 모든 예측 변수를 사용하는 회귀 결과를 줍니다.
+
+```{r chunk17}
+lm.fit1 <- lm(medv ~ . - age, data = Boston)
+summary(lm.fit1)
+```
+
+혹은 `update()` 함수를 이용하여 기존 결과를 업데이트 할 수 있습니다.
+
+```{r chunk18}
+lm.fit1 <- update(lm.fit, ~ . - age)
+
+```
+
+## 교차항(Interaction Terms)
+
+`lstat:black`은 `R`에 `lstat`과 `black` 사이의 상호 작용 항을 포함하도록 지시합니다.
+`lstat * age`는 예측 변수로 `lstat`, `age` 및 상호 작용 항 `lstat'$\times$'age`를 동시에 포함합니다.
+이는 `lstat + age + lstat:age`의 축약형입니다.
+
+```{r chunk19}
+summary(lm(medv ~ lstat * age, data = Boston))
+```
+
+## 설명변수의 비선형 변환(Non-linear Transformations of the Predictors)
+
+`lm()` 함수는 또한 예측 변수의 비선형 변환을 수용할 수 있습니다.
+예를 들어, 예측 변수 $X$가 주어지면, 우리는 다음을 사용하여 예측 변수 $X^2$를 만들 수 있습니다.
+다음은 'medv'를 'lstat'와 'lstat\^2'을 이용하여 회귀분석을 수행하는 코드입니다.
+
+```{r chunk20}
+lm.fit2 <- lm(medv ~ lstat + I(lstat^2))
+summary(lm.fit2)
+```
+
+$2$차 항과 관련된 $p$-값이 $0$에 가깝다는 것은 이 항이 개선된 모형으로 이어진다는 것을 나타냅니다.
+우리는 `anova()` 함수를 사용하여 2차 적합이 선형 적합보다 우수한 정도를 추가로 정량화할 수 있습니다.
+
+```{r chunk21}
+lm.fit <- lm(medv ~ lstat)
+anova(lm.fit, lm.fit2)
+```
+
+여기서 모델 1은 예측 변수 'lstat'를 하나만 포함하는 선형 하위 모델을 나타내는 반면 모델 2는 예측 변수 `lstat`과 `lstat^2`를 두 개 포함하는 더 큰 2차 모델에 해당합니다.
+
+`anova()` 함수는 두 모형을 비교하는 가설 검정을 수행합니다.
+귀무 가설은 두 모형이 데이터를 동등하게 잘 적합시킨다는 것이고, 대립 가설은 전체 모형이 우월하다는 것입니다.
+여기서 $F$-통계량은 $135$이고 관련 $p$-값은 사실상 $0$이라고 할 수 있습니다.
+이는 예측 변수 `lstat`와 `lstat^2`를 포함하는 모델이 예측 변수 `lstat`만 포함하는 모델보다 훨씬 우수하다는 매우 명확한 증거를 제공하고 있습니다.
+앞서 `medv`와 `lstat` 사이의 관계에서 비선형성에 대한 증거를 보았기 때문에 이것은 놀라운 일이 아닙니다.
+
+```{r chunk22}
+par(mfrow = c(2, 2))
+plot(lm.fit2)
+```
+
+우리는 `lstat^2` 항이 모델에 포함되어 있을 때 잔차에 식별 가능한 패턴이 거의 없음을 알 수 있습니다.
+
+3차 항을 포함하여 적합시키기 위해, `I(X^3)` 형식의 예측 변수를 포함할 수 있습니다.
+그러나 이 접근법은 고차 다항식의 경우 번거로울 수 있습니다.
+더 나은 접근법은 `poly()` 함수를 사용하여 `lm()` 내에서 다항식을 만드는 것을 포함시키는 것입니다.
+예를 들어, 다음 명령을 실행하면 $5$차 다항식 적합치가 생성됩니다.
+
+```{r chunk23}
+lm.fit5 <- lm(medv ~ poly(lstat, 5))
+summary(lm.fit5)
+```
+
+다항식 항을 5차까지 추가하면 모형 적합성이 향상됨을 알 수 있습니다.
+
+```{r chunk23_2}
+lm.fit10 <- lm(medv ~ poly(lstat, 10))
+summary(lm.fit10)
+```
+
+그러나 5차 이상의 다항식에서는 회귀 적합에서 유의한 $p$-값을 갖는 다항식 항이 없다는 것을 알 수 있습니다.
+
+기본적으로 `poly()` 함수는 예측 변수를 직교하여 나타내며, 이는 이 함수에 의해 출력된 값이 단순히 설명변수들의 거듭제곱이 아니라는 것을 의미합니다.
+그러나 `poly()` 함수의 출력에 적용되는 선형 모델은 원시 다항식(단순히 거듭제곱을 한 식)에 적용되는 선형 모델과 동일한 적합치를 갖습니다(여기서, 계수 추정치, 표준 오차 및 $p$-값은 다를 수 있습니다).
+`poly()` 함수에서 원시 다항식을 얻기 위해서는 'raw = TRUE'라는 인수를 사용해야 합니다.
+
+```{r chunk23_3}
+lm.fit10_1 <- lm(medv ~ poly(lstat, 10, raw=TRUE))
+summary(lm.fit10_1)
+```
+
+`log()`, `sqrt()`함수를 이용하여 다음과 같이 로그, 제곱근 변환된 변수를 활용할 수도 있습니다.
+
+```{r chunk24}
+summary(lm(medv ~ log(rm), data = Boston))
+summary(lm(medv ~ sqrt(rm), data = Boston))
+```
+
+## 질적 설명변수(Qualitative Predictors)
+
+<!--We will now examine the `Carseats` data, which is part of the `ISLR2` library.
+We will attempt to predict `Sales` (child car seat sales) in $400$ locations based on a number of predictors.-->
+
+이제 `ISLR2` 라이브러리의 일부인 `Carseats` 자료를 살펴보도록 하겠습니다.
+다수의 예측 변수를 바탕으로 $400$ 장소에서의 어린이용 카시트 판매량을 예측하는 문제를 살펴봅시다.
+
+```{r chunk25}
+head(Carseats)
+```
+
+`Carseats` 데이터에는 카시트가 전시된 매장 내 공간의 품질을 나타내는 지표인 `shelveloc`과 같은 질적(정성적) 예측 변수가 포함됩니다.
+예측 변수 `shelveloc`은 *Bad*, *중간*, *Good*의 세 가지 가능한 값을 갖습니다.
+`shelveloc`와 같은 질적 변수가 주어지면 `R`은 자동으로 더미(dummy) 변수를 생성합니다.
+일부 교호작용 항이 포함된 다중 회귀 모형을 적합시켜봅시다.
+
+```{r chunk26}
+lm.fit <- lm(Sales ~ . + Income:Advertising + Price:Age, 
+    data = Carseats)
+summary(lm.fit)
+```
+
+`contrasts()`함수는 `R`에서 더미 변수들을 코딩한 형태를 보여줍니다.
+
+```{r chunk27}
+attach(Carseats)
+contrasts(ShelveLoc)
+```
+
+대조에 관한 추가적인 설명은 `?contrasts`을 참고하세요.
+
+잘못된 선반 위치는 두 더미 변수 각각에 대해 $0$에 해당합니다.
+회귀 결과에서 `ShelveLocGood`에 대한 계수가 양수라는 것은 좋은 선반 위치가 (나쁜 위치와 상대적으로) 높은 매출과 연관되어 있다는 것을 나타냅니다.
+그리고 `ShelveLocMedium`은 양수계수가 좋은 선반위치보다 작으므로, 중간 규모의 선반이 불량 선반에 비해 매출이 높지만 좋은 선반에 비해 매출이 낮다는 것을 알 수 있습니다.
